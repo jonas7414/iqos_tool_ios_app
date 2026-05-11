@@ -38,6 +38,36 @@ final class IQOSProtocolTests: XCTestCase {
         XCTAssertTrue(settings.whenManuallyTerminated)
     }
 
+    func testBuildsVibrationUpdateCommand() throws {
+        let commands = try IQOSProtocol.vibrationCommands(
+            for: IQOSVibrationSettings(
+                whenHeatingStart: true,
+                whenStartingToUse: false,
+                whenPuffEnd: true,
+                whenManuallyTerminated: false
+            ),
+            model: .ilumaOne
+        )
+
+        XCTAssertEqual(commands, [[0x00, 0xC9, 0x44, 0x23, 0x10, 0x00, 0x01, 0x01, 0x65]])
+    }
+
+    func testBuildsHolderChargeStartVibrationCommands() throws {
+        let commands = try IQOSProtocol.vibrationCommands(
+            for: IQOSVibrationSettings(
+                whenChargingStart: true,
+                whenHeatingStart: true,
+                whenStartingToUse: false,
+                whenPuffEnd: false,
+                whenManuallyTerminated: false
+            ),
+            model: .iluma
+        )
+
+        XCTAssertEqual(commands.count, 8)
+        XCTAssertEqual(commands[1], [0x01, 0xC9, 0x4F, 0x04, 0x5B, 0x04, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    }
+
     func testParsesFirmwareAndProductNumber() throws {
         let firmware = try IQOSProtocolParser.firmwareVersion(
             from: [0x00, 0x08, 0x88, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x19],

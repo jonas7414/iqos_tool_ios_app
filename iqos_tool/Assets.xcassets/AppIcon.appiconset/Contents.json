@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "ChatGPT Image May 11, 2026 at 04_25_12 PM-2-2-2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -28,21 +29,25 @@
       "size" : "1024x1024"
     },
     {
+      "filename" : "ChatGPT Image May 11, 2026 at 04_25_12 PM-2-2-3.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "16x16"
     },
     {
+      "filename" : "ChatGPT Image May 11, 2026 at 04_25_12 PM-2-2-5.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "16x16"
     },
     {
+      "filename" : "ChatGPT Image May 11, 2026 at 04_25_12 PM-2-2-5 1.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "32x32"
     },
     {
+      "filename" : "ChatGPT Image May 11, 2026 at 04_25_12 PM-2-2-4.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "32x32"

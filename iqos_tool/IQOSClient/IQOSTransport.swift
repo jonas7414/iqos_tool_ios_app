@@ -115,6 +115,20 @@ public actor IQOSDevice {
         return settings
     }
 
+    public func setVibrationSettings(_ settings: IQOSVibrationSettings) async throws {
+        try require(.vibration)
+        var normalized = settings
+        if transport.model.supports(.chargeStartVibration), normalized.whenChargingStart == nil {
+            normalized.whenChargingStart = (try? await readVibrationSettings())?.whenChargingStart ?? false
+        } else if !transport.model.supports(.chargeStartVibration) {
+            normalized.whenChargingStart = nil
+        }
+
+        for command in try IQOSProtocol.vibrationCommands(for: normalized, model: transport.model) {
+            try await transport.send(command)
+        }
+    }
+
     public func startFindMyIQOS() async throws {
         try await transport.send(IQOSProtocol.startVibrate)
     }

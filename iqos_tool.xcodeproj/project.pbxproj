@@ -6,7 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA0000012FB2000000000001 /* iqos_tool_widget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000022FB2000000000002 /* iqos_tool_widget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		AA0000092FB2000000000009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DDA9E6892FB1A15F0062C308 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000082FB2000000000008;
+			remoteInfo = iqos_tool_widget;
+		};
 		DDA9E69F2FB1A1650062C308 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DDA9E6892FB1A15F0062C308 /* Project object */;
@@ -23,13 +34,33 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AA0000072FB2000000000007 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA0000012FB2000000000001 /* iqos_tool_widget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		AA0000022FB2000000000002 /* iqos_tool_widget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = iqos_tool_widget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDA9E6912FB1A1600062C308 /* iqos_tool.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iqos_tool.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDA9E69E2FB1A1650062C308 /* iqos_toolTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iqos_toolTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDA9E6A82FB1A1650062C308 /* iqos_toolUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iqos_toolUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AA0000032FB2000000000003 /* iqos_tool_widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = iqos_tool_widget;
+			sourceTree = "<group>";
+		};
 		DDA9E6932FB1A1600062C308 /* iqos_tool */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = iqos_tool;
@@ -69,6 +100,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000042FB2000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -76,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				DDA9E6932FB1A1600062C308 /* iqos_tool */,
+				AA0000032FB2000000000003 /* iqos_tool_widget */,
 				DDA9E6A12FB1A1650062C308 /* iqos_toolTests */,
 				DDA9E6AB2FB1A1650062C308 /* iqos_toolUITests */,
 				DDA9E6922FB1A1600062C308 /* Products */,
@@ -86,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				DDA9E6912FB1A1600062C308 /* iqos_tool.app */,
+				AA0000022FB2000000000002 /* iqos_tool_widget.appex */,
 				DDA9E69E2FB1A1650062C308 /* iqos_toolTests.xctest */,
 				DDA9E6A82FB1A1650062C308 /* iqos_toolUITests.xctest */,
 			);
@@ -102,10 +142,12 @@
 				DDA9E68D2FB1A1600062C308 /* Sources */,
 				DDA9E68E2FB1A1600062C308 /* Frameworks */,
 				DDA9E68F2FB1A1600062C308 /* Resources */,
+				AA0000072FB2000000000007 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA00000A2FB200000000000A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DDA9E6932FB1A1600062C308 /* iqos_tool */,
@@ -163,6 +205,28 @@
 			productReference = DDA9E6A82FB1A1650062C308 /* iqos_toolUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		AA0000082FB2000000000008 /* iqos_tool_widget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000B2FB200000000000B /* Build configuration list for PBXNativeTarget "iqos_tool_widget" */;
+			buildPhases = (
+				AA0000062FB2000000000006 /* Sources */,
+				AA0000042FB2000000000004 /* Frameworks */,
+				AA0000052FB2000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000032FB2000000000003 /* iqos_tool_widget */,
+			);
+			name = iqos_tool_widget;
+			packageProductDependencies = (
+			);
+			productName = iqos_tool_widget;
+			productReference = AA0000022FB2000000000002 /* iqos_tool_widget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -173,6 +237,9 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					AA0000082FB2000000000008 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
 					DDA9E6902FB1A1600062C308 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
@@ -192,6 +259,7 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hant",
 			);
 			mainGroup = DDA9E6882FB1A15F0062C308;
 			minimizedProjectReferenceProxies = 1;
@@ -201,6 +269,7 @@
 			projectRoot = "";
 			targets = (
 				DDA9E6902FB1A1600062C308 /* iqos_tool */,
+				AA0000082FB2000000000008 /* iqos_tool_widget */,
 				DDA9E69D2FB1A1650062C308 /* iqos_toolTests */,
 				DDA9E6A72FB1A1650062C308 /* iqos_toolUITests */,
 			);
@@ -223,6 +292,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		DDA9E6A62FB1A1650062C308 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000052FB2000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,9 +329,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000062FB2000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		AA00000A2FB200000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000082FB2000000000008 /* iqos_tool_widget */;
+			targetProxy = AA0000092FB2000000000009 /* PBXContainerItemProxy */;
+		};
 		DDA9E6A02FB1A1650062C308 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = DDA9E6902FB1A1600062C308 /* iqos_tool */;
@@ -390,6 +478,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = iqos_tool/iqos_tool.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R59D4KY82R;
@@ -397,8 +486,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "iqos_tool-Info.plist";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app connects to nearby IQOS devices over Bluetooth.";
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -432,6 +523,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = iqos_tool/iqos_tool.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R59D4KY82R;
@@ -439,8 +531,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "iqos_tool-Info.plist";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app connects to nearby IQOS devices over Bluetooth.";
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -563,6 +657,70 @@
 			};
 			name = Release;
 		};
+		AA00000C2FB200000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = iqos_tool_widget/iqos_tool_widget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R59D4KY82R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "iqos_tool_widget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "iqos-tool.iqos-tool.widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA00000D2FB200000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = iqos_tool_widget/iqos_tool_widget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R59D4KY82R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "iqos_tool_widget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "iqos-tool.iqos-tool.widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -598,6 +756,15 @@
 			buildConfigurations = (
 				DDA9E6B92FB1A1650062C308 /* Debug */,
 				DDA9E6BA2FB1A1650062C308 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA00000B2FB200000000000B /* Build configuration list for PBXNativeTarget "iqos_tool_widget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA00000C2FB200000000000C /* Debug */,
+				AA00000D2FB200000000000D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

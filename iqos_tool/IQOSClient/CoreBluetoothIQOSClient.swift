@@ -51,8 +51,42 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
             return result
         }
 
-        let transport = try await CoreBluetoothIQOSTransport(peripheral: connected)
+        let transport = try await CoreBluetoothIQOSTransport(peripheral: connected, advertisedName: discoveredDevice.name)
         return IQOSDevice(transport: transport, identifier: connected.identifier, localName: connected.name)
+    }
+
+    public func connectToKnownDevice(identifier: UUID, localName: String?, timeout: TimeInterval = 12) async throws -> IQOSDevice {
+        try await waitUntilPoweredOn()
+
+        let serviceUUID = CBUUID(string: IQOSProtocol.coreServiceUUID)
+        let peripheral = peripherals[identifier]
+            ?? centralManager.retrievePeripherals(withIdentifiers: [identifier]).first
+            ?? centralManager.retrieveConnectedPeripherals(withServices: [serviceUUID]).first(where: { $0.identifier == identifier })
+
+        guard let peripheral else {
+            throw IQOSError.deviceNotFound
+        }
+
+        peripherals[identifier] = peripheral
+
+        let connected = try await withThrowingTaskGroup(of: CBPeripheral.self) { group in
+            group.addTask {
+                if peripheral.state == .connected {
+                    return peripheral
+                }
+                return try await self.connectPeripheral(peripheral)
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                throw IQOSError.timeout
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+
+        let transport = try await CoreBluetoothIQOSTransport(peripheral: connected, advertisedName: localName)
+        return IQOSDevice(transport: transport, identifier: connected.identifier, localName: connected.name ?? localName)
     }
 
     private func waitUntilPoweredOn() async throws {
@@ -122,14 +156,16 @@ public final class CoreBluetoothIQOSTransport: NSObject, IQOSTransport, @uncheck
     public private(set) var deviceInfo = IQOSDeviceInfo()
 
     private let peripheral: CBPeripheral
+    private let advertisedName: String?
     private var batteryCharacteristic: CBCharacteristic?
     private var scpControlCharacteristic: CBCharacteristic?
     private var readContinuations: [CBUUID: CheckedContinuation<[UInt8], Error>] = [:]
     private var notificationContinuation: CheckedContinuation<[UInt8], Error>?
     private var discoveryContinuation: CheckedContinuation<Void, Error>?
 
-    public init(peripheral: CBPeripheral) async throws {
+    public init(peripheral: CBPeripheral, advertisedName: String? = nil) async throws {
         self.peripheral = peripheral
+        self.advertisedName = advertisedName
         super.init()
         peripheral.delegate = self
         try await discover()
@@ -168,7 +204,7 @@ public final class CoreBluetoothIQOSTransport: NSObject, IQOSTransport, @uncheck
                 CBUUID(string: IQOSProtocol.coreServiceUUID)
             ])
         }
-        model = IQOSDeviceModel(localName: peripheral.name)
+        model = IQOSDeviceModel(localName: peripheral.name ?? advertisedName)
     }
 
     private func read(_ characteristic: CBCharacteristic) async throws -> [UInt8] {

@@ -7,24 +7,84 @@
 
 import Combine
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
+
+private enum AppSection: String, CaseIterable {
+    case control
+    case settings
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .control: "Controls"
+        case .settings: "Settings"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .control: "slider.horizontal.3"
+        case .settings: "gearshape"
+        }
+    }
+}
+
+private enum ComplianceStatus: String {
+    case pending
+    case allowed
+    case blockedRegion
+    case blockedAge
+}
 
 struct ContentView: View {
     @StateObject private var viewModel = IQOSToolViewModel()
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var selectedSection: AppSection = .control
+    @State private var complianceStatus = ComplianceGateStore.status
 
     var body: some View {
+        switch complianceStatus {
+        case .allowed:
+            mainContent
+        case .blockedRegion, .blockedAge:
+            ComplianceBlockedView(status: complianceStatus)
+        case .pending:
+            ComplianceGateView(
+                onBlockedRegion: {
+                    setComplianceStatus(.blockedRegion)
+                },
+                onBlockedAge: {
+                    setComplianceStatus(.blockedAge)
+                },
+                onAllowed: {
+                    setComplianceStatus(.allowed)
+                }
+            )
+        }
+    }
+
+    private var mainContent: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     DeviceHeaderView(viewModel: viewModel)
-                    ScanPanelView(viewModel: viewModel)
-                    ControlPanelView(viewModel: viewModel)
-                    DiagnosticsPanelView(viewModel: viewModel)
+                    if selectedSection == .control {
+                        ScanPanelView(viewModel: viewModel)
+                        ControlPanelView(viewModel: viewModel)
+                        DiagnosticsPanelView(viewModel: viewModel)
+                    } else {
+                        SettingsPanelView(viewModel: viewModel)
+                    }
                 }
                 .padding(16)
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("IQOS Tool")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    SectionMenuButton(selectedSection: $selectedSection)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         viewModel.refreshConnectedDevice()
@@ -32,14 +92,266 @@ struct ContentView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                     .disabled(viewModel.connectedDevice == nil || viewModel.isBusy)
-                    .accessibilityLabel("Refresh")
+                    .accessibilityLabel(Text("Refresh"))
                 }
             }
         }
-        .alert("操作失敗", isPresented: $viewModel.isShowingError) {
-            Button("好", role: .cancel) {}
+        .alert("Operation Failed", isPresented: $viewModel.isShowingError) {
+            Button("OK", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage)
+        }
+        .onAppear {
+            viewModel.refreshKnownDeviceUsageIfPossible()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active, .background:
+                viewModel.refreshKnownDeviceUsageIfPossible()
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func setComplianceStatus(_ status: ComplianceStatus) {
+        ComplianceGateStore.status = status
+        complianceStatus = status
+    }
+}
+
+private struct ComplianceGateView: View {
+    enum Step {
+        case region
+        case age
+    }
+
+    @State private var step: Step = .region
+    @State private var remainingReadSeconds = 5
+    @State private var selectedBirthYear = Calendar.current.component(.year, from: Date()) - 20
+    let onBlockedRegion: () -> Void
+    let onBlockedAge: () -> Void
+    let onAllowed: () -> Void
+
+    private let birthYears = Array(stride(
+        from: Calendar.current.component(.year, from: Date()) - 100,
+        through: Calendar.current.component(.year, from: Date()),
+        by: 1
+    ).reversed())
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.orange)
+
+            VStack(spacing: 8) {
+                Text("Compliance Check")
+                    .font(.title2.weight(.semibold))
+                Text(promptText)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                Text("This app is for educational and research purposes only. All actual rights belong to Philip Morris International.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                if remainingReadSeconds > 0 {
+                    Text(String(format: String(localized: "Please read for %d more seconds"), remainingReadSeconds))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            VStack(spacing: 10) {
+                if step == .region {
+                    Button {
+                        step = .age
+                    } label: {
+                        Text("No")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canContinue)
+
+                    Button(role: .destructive) {
+                        onBlockedRegion()
+                    } label: {
+                        Text("Yes, exit")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!canContinue)
+                } else {
+                    birthYearSelection
+
+                    Button {
+                        if isSelectedBirthYearAllowed {
+                            onAllowed()
+                        } else {
+                            onBlockedAge()
+                        }
+                    } label: {
+                        Text("Continue")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canContinue)
+                }
+            }
+            .padding(.horizontal, 28)
+
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
+        .task(id: step) {
+            await runReadDelay()
+        }
+    }
+
+    private var promptText: LocalizedStringKey {
+        switch step {
+        case .region:
+            "Are you currently located within the territory of the Republic of China?"
+        case .age:
+            "Select your birth year to confirm you are 20 years of age or older."
+        }
+    }
+
+    private var canContinue: Bool {
+        remainingReadSeconds == 0
+    }
+
+    private var isSelectedBirthYearAllowed: Bool {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return selectedBirthYear <= currentYear - 20
+    }
+
+    private var birthYearSelection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Birth Year")
+                .font(.subheadline.weight(.semibold))
+            ScrollView {
+                LazyVStack(spacing: 6) {
+                    ForEach(birthYears, id: \.self) { year in
+                        Button {
+                            selectedBirthYear = year
+                        } label: {
+                            HStack {
+                                Text(String(year))
+                                Spacer()
+                                Image(systemName: selectedBirthYear == year ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selectedBirthYear == year ? Color.accentColor : Color.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .frame(height: 40)
+                            .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxHeight: 180)
+            Text("Users born after the eligible year cannot continue.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func runReadDelay() async {
+        remainingReadSeconds = 5
+        while remainingReadSeconds > 0 {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            remainingReadSeconds -= 1
+        }
+    }
+}
+
+private struct ComplianceBlockedView: View {
+    let status: ComplianceStatus
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            Image(systemName: "nosign")
+                .font(.system(size: 52))
+                .foregroundStyle(.red)
+
+            Text("Access Unavailable")
+                .font(.title2.weight(.semibold))
+            Text(messageText)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private var messageText: LocalizedStringKey {
+        switch status {
+        case .blockedRegion:
+            "This app is unavailable within the territory of the Republic of China."
+        case .blockedAge:
+            "This app is only available to users who are 20 years of age or older."
+        case .pending, .allowed:
+            ""
+        }
+    }
+}
+
+private struct SectionMenuButton: View {
+    @Binding var selectedSection: AppSection
+
+    var body: some View {
+        Menu {
+            ForEach(AppSection.allCases, id: \.self) { section in
+                Button {
+                    selectedSection = section
+                } label: {
+                    Label {
+                        Text(section.title)
+                    } icon: {
+                        Image(systemName: selectedSection == section ? "checkmark" : section.icon)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.headline)
+                .frame(width: 36, height: 36)
+        }
+        .accessibilityLabel(Text("Menu"))
+    }
+}
+
+private struct SelectedSectionHeader: View {
+    let section: AppSection
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: section.icon)
+                .font(.headline)
+                .foregroundStyle(.teal)
+            Text(section.title)
+                .font(.headline)
+            Spacer()
         }
     }
 }
@@ -60,7 +372,7 @@ private struct DeviceHeaderView: View {
                 .frame(width: 56, height: 56)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(viewModel.connectedDevice?.displayName ?? "尚未連線")
+                    Text(viewModel.connectedDevice?.displayName ?? String(localized: "Not Connected"))
                         .font(.title2.weight(.semibold))
                         .lineLimit(2)
                     Text(viewModel.statusText)
@@ -73,9 +385,9 @@ private struct DeviceHeaderView: View {
             }
 
             HStack(spacing: 10) {
-                MetricTile(title: "電量", value: viewModel.batteryText, icon: "battery.100percent")
-                MetricTile(title: "型號", value: viewModel.connectedDevice?.model.displayName ?? "--", icon: "iphone.gen3")
-                MetricTile(title: "訊號", value: viewModel.connectedRSSIText, icon: "antenna.radiowaves.left.and.right")
+                MetricTile(title: "Battery", value: viewModel.batteryText, icon: "battery.100percent")
+                MetricTile(title: "Model", value: viewModel.connectedDevice?.model.displayName ?? "--", icon: "iphone.gen3")
+                MetricTile(title: "Signal", value: viewModel.connectedRSSIText, icon: "antenna.radiowaves.left.and.right")
             }
         }
         .padding(16)
@@ -84,7 +396,7 @@ private struct DeviceHeaderView: View {
 }
 
 private struct MetricTile: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let icon: String
 
@@ -113,7 +425,7 @@ private struct ScanPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("附近裝置", systemImage: "wave.3.right")
+                Label("Nearby Devices", systemImage: "wave.3.right")
                     .font(.headline)
                 Spacer()
                 Button {
@@ -128,7 +440,7 @@ private struct ScanPanelView: View {
                 .frame(width: 36, height: 36)
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .disabled(viewModel.isScanning || viewModel.isConnecting)
-                .accessibilityLabel("Scan")
+                .accessibilityLabel(Text("Scan"))
             }
 
             if viewModel.discoveredDevices.isEmpty {
@@ -180,7 +492,7 @@ private struct EmptyScanView: View {
             Image(systemName: isScanning ? "dot.radiowaves.left.and.right" : "tray")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text(isScanning ? "正在搜尋 IQOS 裝置" : "點擊搜尋開始掃描")
+            Text(isScanning ? "Searching for IQOS devices" : "Tap search to start scanning")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -195,12 +507,13 @@ private struct ControlPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("控制", systemImage: "slider.horizontal.3")
+            Label("Controls", systemImage: "slider.horizontal.3")
                 .font(.headline)
 
-            Picker("亮度", selection: $viewModel.selectedBrightness) {
-                Text("高").tag(IQOSBrightnessLevel.high)
-                Text("低").tag(IQOSBrightnessLevel.low)
+            ControlSectionHeader(title: "Indicator Light", subtitle: "Choose the LED brightness level")
+            Picker("Brightness", selection: $viewModel.selectedBrightness) {
+                Text("High").tag(IQOSBrightnessLevel.high)
+                Text("Low").tag(IQOSBrightnessLevel.low)
             }
             .pickerStyle(.segmented)
             .disabled(!viewModel.supports(.brightness) || viewModel.isBusy)
@@ -214,52 +527,81 @@ private struct ControlPanelView: View {
                     subtitle: "ILUMA i / i PRIME",
                     icon: "wind",
                     isOn: $viewModel.flexPuffEnabled,
-                    isEnabled: viewModel.supports(.flexPuff)
+                    isEnabled: viewModel.supports(.flexPuff),
+                    isBusy: viewModel.isBusy
                 ) { value in
                     viewModel.setFlexPuff(value)
                 }
 
                 ToggleRow(
                     title: "Pause Mode",
-                    subtitle: viewModel.flexBatteryMode == .eco ? "Eco 電池模式" : "Performance 電池模式",
+                    subtitle: viewModel.flexBatteryMode == .eco ? "Eco battery mode" : "Performance battery mode",
                     icon: "pause.circle",
                     isOn: $viewModel.pauseModeEnabled,
-                    isEnabled: viewModel.supports(.flexBattery)
+                    isEnabled: viewModel.supports(.flexBattery),
+                    isBusy: viewModel.isBusy
                 ) { _ in
                     viewModel.setFlexBatterySettings()
                 }
 
                 ToggleRow(
                     title: "Auto Start",
-                    subtitle: "插入時自動啟動",
+                    subtitle: "Start automatically when inserted",
                     icon: "bolt.fill",
                     isOn: $viewModel.autoStartEnabled,
-                    isEnabled: viewModel.supports(.autoStart)
+                    isEnabled: viewModel.supports(.autoStart),
+                    isBusy: viewModel.isBusy
                 ) { value in
                     viewModel.setAutoStart(value)
                 }
+
+                ToggleRow(
+                    title: "Smart Gesture",
+                    subtitle: "Enable gesture control on supported devices",
+                    icon: "hand.tap",
+                    isOn: $viewModel.smartGestureEnabled,
+                    isEnabled: viewModel.supports(.smartGesture),
+                    isBusy: viewModel.isBusy
+                ) { value in
+                    viewModel.setSmartGesture(value)
+                }
             }
 
-            Picker("電池模式", selection: $viewModel.flexBatteryMode) {
-                Text("效能").tag(IQOSFlexBatteryMode.performance)
-                Text("節能").tag(IQOSFlexBatteryMode.eco)
+            ControlSectionHeader(title: "Battery Mode", subtitle: "Switch between performance and longer battery life")
+            HStack(spacing: 10) {
+                BatteryModeButton(
+                    title: "Performance",
+                    icon: "bolt.circle.fill",
+                    tint: .indigo,
+                    isSelected: viewModel.flexBatteryMode == .performance
+                ) {
+                    viewModel.setBatteryMode(.performance)
+                }
+                BatteryModeButton(
+                    title: "Eco",
+                    icon: "leaf.circle.fill",
+                    tint: .green,
+                    isSelected: viewModel.flexBatteryMode == .eco
+                ) {
+                    viewModel.setBatteryMode(.eco)
+                }
             }
-            .pickerStyle(.segmented)
             .disabled(!viewModel.supports(.flexBattery) || viewModel.isBusy)
-            .onChange(of: viewModel.flexBatteryMode) { _, _ in
-                viewModel.setFlexBatterySettings()
-            }
+
+            VibrationPanelView(viewModel: viewModel)
 
             HStack(spacing: 10) {
-                ActionButton(title: "鎖定", icon: "lock.fill", tint: .red) {
+                ActionButton(title: "Lock", icon: "lock.fill", tint: .red) {
                     viewModel.lockDevice()
                 }
-                ActionButton(title: "解鎖", icon: "lock.open.fill", tint: .green) {
+                ActionButton(title: "Unlock", icon: "lock.open.fill", tint: .green) {
                     viewModel.unlockDevice()
                 }
-                ActionButton(title: "尋找", icon: "location.fill", tint: .orange) {
-                    viewModel.pulseFindMyIQOS()
-                }
+            }
+            .disabled(!viewModel.supports(.deviceLock) || viewModel.isBusy)
+
+            ActionButton(title: "Find", icon: "location.fill", tint: .orange, minHeight: 54) {
+                viewModel.pulseFindMyIQOS()
             }
             .disabled(viewModel.connectedDevice == nil || viewModel.isBusy)
         }
@@ -267,12 +609,117 @@ private struct ControlPanelView: View {
     }
 }
 
+private struct ControlSectionHeader: View {
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct BatteryModeButton: View {
+    let title: LocalizedStringKey
+    let icon: String
+    let tint: Color
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.headline)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .foregroundStyle(isSelected ? .white : tint)
+            .background(isSelected ? tint : tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct VibrationPanelView: View {
+    @ObservedObject var viewModel: IQOSToolViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ControlSectionHeader(title: "Vibration", subtitle: "Choose when the device vibrates")
+            ToggleRow(
+                title: "Heating Start",
+                subtitle: "Vibrate when heating starts",
+                icon: "flame",
+                isOn: $viewModel.vibrationSettings.whenHeatingStart,
+                isEnabled: viewModel.supports(.vibration),
+                isBusy: viewModel.isBusy
+            ) { value in
+                viewModel.setVibration(\.whenHeatingStart, enabled: value)
+            }
+            ToggleRow(
+                title: "Session Start",
+                subtitle: "Vibrate when usage starts",
+                icon: "play.circle",
+                isOn: $viewModel.vibrationSettings.whenStartingToUse,
+                isEnabled: viewModel.supports(.vibration),
+                isBusy: viewModel.isBusy
+            ) { value in
+                viewModel.setVibration(\.whenStartingToUse, enabled: value)
+            }
+            ToggleRow(
+                title: "Puff End",
+                subtitle: "Vibrate near puff end",
+                icon: "timer",
+                isOn: $viewModel.vibrationSettings.whenPuffEnd,
+                isEnabled: viewModel.supports(.vibration),
+                isBusy: viewModel.isBusy
+            ) { value in
+                viewModel.setVibration(\.whenPuffEnd, enabled: value)
+            }
+            ToggleRow(
+                title: "Manual Stop",
+                subtitle: "Vibrate after manual termination",
+                icon: "stop.circle",
+                isOn: $viewModel.vibrationSettings.whenManuallyTerminated,
+                isEnabled: viewModel.supports(.vibration),
+                isBusy: viewModel.isBusy
+            ) { value in
+                viewModel.setVibration(\.whenManuallyTerminated, enabled: value)
+            }
+            ToggleRow(
+                title: "Charge Start",
+                subtitle: "Vibrate when holder charging starts",
+                icon: "battery.100percent.bolt",
+                isOn: Binding(
+                    get: { viewModel.vibrationSettings.whenChargingStart ?? false },
+                    set: { viewModel.vibrationSettings.whenChargingStart = $0 }
+                ),
+                isEnabled: viewModel.supports(.chargeStartVibration),
+                isBusy: viewModel.isBusy
+            ) { value in
+                viewModel.setChargeStartVibration(value)
+            }
+        }
+    }
+}
+
 private struct ToggleRow: View {
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     let icon: String
     @Binding var isOn: Bool
     let isEnabled: Bool
+    let isBusy: Bool
     let onChange: (Bool) -> Void
 
     var body: some View {
@@ -285,7 +732,7 @@ private struct ToggleRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                Text(isEnabled ? subtitle : "此型號不支援")
+                Text(isEnabled ? subtitle : "This model is not supported")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -294,9 +741,9 @@ private struct ToggleRow: View {
 
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
-                .disabled(!isEnabled)
+                .disabled(!isEnabled || isBusy)
                 .onChange(of: isOn) { _, value in
-                    guard isEnabled else { return }
+                    guard isEnabled, !isBusy else { return }
                     onChange(value)
                 }
         }
@@ -306,25 +753,27 @@ private struct ToggleRow: View {
 }
 
 private struct ActionButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: String
     let tint: Color
+    var minHeight: CGFloat = 62
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.headline)
                 Text(title)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
-            .frame(maxWidth: .infinity, minHeight: 62)
+            .frame(maxWidth: .infinity, minHeight: minHeight)
             .foregroundStyle(tint)
             .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -334,7 +783,7 @@ private struct DiagnosticsPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("診斷", systemImage: "stethoscope")
+                Label("Diagnostics", systemImage: "stethoscope")
                     .font(.headline)
                 Spacer()
                 Button {
@@ -345,16 +794,16 @@ private struct DiagnosticsPanelView: View {
                 .frame(width: 36, height: 36)
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .disabled(viewModel.connectedDevice == nil || viewModel.isBusy)
-                .accessibilityLabel("Refresh Diagnostics")
+                .accessibilityLabel(Text("Refresh Diagnostics"))
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                InfoCell(title: "產品序號", value: viewModel.status?.productNumber ?? "--")
-                InfoCell(title: "韌體", value: viewModel.status?.stickFirmware.description ?? "--")
-                InfoCell(title: "使用天數", value: viewModel.diagnostics?.daysUsed.map(String.init) ?? "--")
-                InfoCell(title: "總次數", value: viewModel.diagnostics?.totalSmokingCount.map(String.init) ?? "--")
-                InfoCell(title: "電壓", value: viewModel.voltageText)
-                InfoCell(title: "序號", value: viewModel.connectedDevice?.deviceInfo.serialNumber ?? "--")
+                InfoCell(title: "Product Number", value: viewModel.status?.productNumber ?? "--")
+                InfoCell(title: "Firmware", value: viewModel.status?.stickFirmware.description ?? "--")
+                InfoCell(title: "Days Used", value: viewModel.diagnostics?.daysUsed.map(String.init) ?? "--")
+                InfoCell(title: "Total Uses", value: viewModel.diagnostics?.totalSmokingCount.map(String.init) ?? "--")
+                InfoCell(title: "Voltage", value: viewModel.voltageText)
+                InfoCell(title: "Serial Number", value: viewModel.connectedDevice?.deviceInfo.serialNumber ?? "--")
             }
         }
         .panelStyle()
@@ -362,7 +811,7 @@ private struct DiagnosticsPanelView: View {
 }
 
 private struct InfoCell: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
 
     var body: some View {
@@ -382,6 +831,54 @@ private struct InfoCell: View {
     }
 }
 
+private struct SettingsPanelView: View {
+    @ObservedObject var viewModel: IQOSToolViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Settings", systemImage: "gearshape")
+                .font(.headline)
+
+            Toggle(isOn: $viewModel.backgroundUsageRefreshEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Background Update")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Automatically update today usage widget when iOS allows background Bluetooth")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "info.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                Text("This app is for educational and research purposes only. All actual rights belong to Philip Morris International.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            HStack(spacing: 12) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                Text("Settings content will be added later")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .panelStyle()
+    }
+}
+
 @MainActor
 final class IQOSToolViewModel: ObservableObject {
     @Published var discoveredDevices: [IQOSDiscoveredDevice] = []
@@ -392,21 +889,47 @@ final class IQOSToolViewModel: ObservableObject {
     @Published var flexBatteryMode: IQOSFlexBatteryMode = .performance
     @Published var pauseModeEnabled = false
     @Published var autoStartEnabled = false
+    @Published var smartGestureEnabled = false
+    @Published var vibrationSettings = IQOSVibrationSettings(
+        whenHeatingStart: false,
+        whenStartingToUse: false,
+        whenPuffEnd: false,
+        whenManuallyTerminated: false
+    )
     @Published var diagnostics: IQOSDiagnosticData?
     @Published var status: IQOSDeviceStatus?
     @Published var connectedRSSI: Int?
-    @Published var statusText = "請先搜尋並連線附近的 IQOS 裝置"
+    @Published var statusText = String(localized: "Search for and connect to a nearby IQOS device")
     @Published var isScanning = false
     @Published var isConnecting = false
     @Published var isBusy = false
     @Published var connectingDeviceID: UUID?
     @Published var isShowingError = false
     @Published var errorMessage = ""
+    @Published var backgroundUsageRefreshEnabled = AppSettingsStore.backgroundUsageRefreshEnabled {
+        didSet {
+            AppSettingsStore.backgroundUsageRefreshEnabled = backgroundUsageRefreshEnabled
+            if backgroundUsageRefreshEnabled {
+                if let connectedDevice {
+                    KnownIQOSDeviceStore.save(connectedDevice)
+                }
+                refreshKnownDeviceUsageIfPossible()
+            } else {
+                knownDeviceRefreshTask?.cancel()
+                knownDeviceRefreshTask = nil
+                endBackgroundRefresh()
+            }
+        }
+    }
 
     private let client = CoreBluetoothIQOSClient()
     private var device: IQOSDevice?
     private var scanTask: Task<Void, Never>?
     private var rssiMonitorTask: Task<Void, Never>?
+    private var knownDeviceRefreshTask: Task<Void, Never>?
+#if canImport(UIKit)
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+#endif
 
     var batteryText: String {
         batteryLevel.map { "\($0)%" } ?? "--"
@@ -435,7 +958,7 @@ final class IQOSToolViewModel: ObservableObject {
         scanTask?.cancel()
         discoveredDevices = []
         isScanning = true
-        statusText = "正在搜尋附近裝置"
+        statusText = String(localized: "Searching for nearby devices")
 
         scanTask = Task { [weak self] in
             guard let self else { return }
@@ -445,7 +968,7 @@ final class IQOSToolViewModel: ObservableObject {
             }
             isScanning = false
             if connectedDevice == nil {
-                statusText = discoveredDevices.isEmpty ? "沒有找到 IQOS 裝置" : "選擇裝置進行連線"
+                statusText = discoveredDevices.isEmpty ? String(localized: "No IQOS devices found") : String(localized: "Select a device to connect")
             } else {
                 startRSSIMonitoring()
             }
@@ -455,7 +978,7 @@ final class IQOSToolViewModel: ObservableObject {
     func connect(to discoveredDevice: IQOSDiscoveredDevice) {
         connectingDeviceID = discoveredDevice.id
         isConnecting = true
-        statusText = "正在連線到 \(discoveredDevice.displayName)"
+        statusText = String(format: String(localized: "Connecting to %@"), discoveredDevice.displayName)
 
         Task { [weak self] in
             guard let self else { return }
@@ -465,12 +988,15 @@ final class IQOSToolViewModel: ObservableObject {
                 device = connected
                 connectedDevice = summary
                 connectedRSSI = discoveredDevice.rssi
-                statusText = "已連線"
+                if backgroundUsageRefreshEnabled {
+                    KnownIQOSDeviceStore.save(summary)
+                }
+                statusText = String(localized: "Connected")
                 try await refreshAll()
                 startRSSIMonitoring()
             } catch {
                 show(error)
-                statusText = "連線失敗"
+                statusText = String(localized: "Connection failed")
             }
             isConnecting = false
             connectingDeviceID = nil
@@ -488,14 +1014,74 @@ final class IQOSToolViewModel: ObservableObject {
         }
     }
 
+    func refreshKnownDeviceUsageIfPossible() {
+        guard backgroundUsageRefreshEnabled else { return }
+        guard !isConnecting, !isBusy else { return }
+
+        if let device {
+            knownDeviceRefreshTask?.cancel()
+            knownDeviceRefreshTask = Task { [weak self] in
+                guard let self else { return }
+                beginBackgroundRefresh()
+                defer { endBackgroundRefresh() }
+
+                do {
+                    diagnostics = try await device.readDiagnosis()
+                    updateTodayUsageWidget()
+                    batteryLevel = try? await device.readBatteryLevel()
+                    statusText = String(localized: "Today usage updated")
+                } catch {
+                    if connectedDevice == nil {
+                        statusText = String(localized: "Search for and connect to a nearby IQOS device")
+                    }
+                }
+            }
+            return
+        }
+
+        guard let knownDevice = KnownIQOSDeviceStore.load() else { return }
+
+        knownDeviceRefreshTask?.cancel()
+        knownDeviceRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            beginBackgroundRefresh()
+            defer { endBackgroundRefresh() }
+
+            do {
+                let connected = try await client.connectToKnownDevice(
+                    identifier: knownDevice.identifier,
+                    localName: knownDevice.localName,
+                    timeout: 10
+                )
+                guard !Task.isCancelled else { return }
+
+                device = connected
+                connectedDevice = connected.connectedDevice
+                if backgroundUsageRefreshEnabled {
+                    KnownIQOSDeviceStore.save(connected.connectedDevice)
+                }
+
+                diagnostics = try? await connected.readDiagnosis()
+                updateTodayUsageWidget()
+                batteryLevel = try? await connected.readBatteryLevel()
+                statusText = String(localized: "Today usage updated")
+            } catch {
+                if connectedDevice == nil {
+                    statusText = String(localized: "Search for and connect to a nearby IQOS device")
+                }
+            }
+        }
+    }
+
     func refreshDiagnostics() {
         guard let device else { return }
         isBusy = true
         Task {
             do {
                 diagnostics = try await device.readDiagnosis()
+                updateTodayUsageWidget()
                 status = try? await device.readDeviceStatus()
-                statusText = "診斷資料已更新"
+                statusText = String(localized: "Diagnostics updated")
             } catch {
                 show(error)
             }
@@ -504,51 +1090,82 @@ final class IQOSToolViewModel: ObservableObject {
     }
 
     func setBrightness(_ level: IQOSBrightnessLevel) {
-        guard let device, supports(.brightness) else { return }
-        runCommand("亮度已更新") {
+        guard let device, supports(.brightness), !isBusy else { return }
+        runCommand(String(localized: "Applying LED brightness"), successMessage: String(localized: "Brightness updated")) {
             try await device.setBrightness(level)
         }
     }
 
     func setFlexPuff(_ enabled: Bool) {
-        guard let device, supports(.flexPuff) else { return }
-        runCommand("FlexPuff 已更新") {
+        guard let device, supports(.flexPuff), !isBusy else { return }
+        runCommand(String(localized: "Updating FlexPuff"), successMessage: String(localized: "FlexPuff updated")) {
             try await device.setFlexPuffEnabled(enabled)
         }
     }
 
     func setFlexBatterySettings() {
-        guard let device, supports(.flexBattery) else { return }
+        guard let device, supports(.flexBattery), !isBusy else { return }
         let settings = IQOSFlexBatterySettings(mode: flexBatteryMode, pauseMode: pauseModeEnabled)
-        runCommand("電池設定已更新") {
+        runCommand(String(localized: "Updating battery mode"), successMessage: String(localized: "Battery settings updated")) {
             try await device.setFlexBatterySettings(settings)
         }
     }
 
+    func setBatteryMode(_ mode: IQOSFlexBatteryMode) {
+        guard flexBatteryMode != mode else { return }
+        flexBatteryMode = mode
+        setFlexBatterySettings()
+    }
+
     func setAutoStart(_ enabled: Bool) {
-        guard let device, supports(.autoStart) else { return }
-        runCommand("Auto Start 已更新") {
+        guard let device, supports(.autoStart), !isBusy else { return }
+        runCommand(String(localized: "Updating Auto Start"), successMessage: String(localized: "Auto Start updated")) {
             try await device.setAutoStartEnabled(enabled)
         }
     }
 
+    func setSmartGesture(_ enabled: Bool) {
+        guard let device, supports(.smartGesture), !isBusy else { return }
+        runCommand(String(localized: "Updating Smart Gesture"), successMessage: String(localized: "Smart Gesture updated")) {
+            try await device.setSmartGestureEnabled(enabled)
+        }
+    }
+
+    func setVibration(_ keyPath: WritableKeyPath<IQOSVibrationSettings, Bool>, enabled: Bool) {
+        guard let device, supports(.vibration), !isBusy else { return }
+        vibrationSettings[keyPath: keyPath] = enabled
+        let settings = vibrationSettings
+        runCommand(String(localized: "Updating vibration"), successMessage: String(localized: "Vibration updated")) {
+            try await device.setVibrationSettings(settings)
+        }
+    }
+
+    func setChargeStartVibration(_ enabled: Bool) {
+        guard let device, supports(.chargeStartVibration), !isBusy else { return }
+        vibrationSettings.whenChargingStart = enabled
+        let settings = vibrationSettings
+        runCommand(String(localized: "Updating vibration"), successMessage: String(localized: "Vibration updated")) {
+            try await device.setVibrationSettings(settings)
+        }
+    }
+
     func lockDevice() {
-        guard let device, supports(.deviceLock) else { return }
-        runCommand("裝置已鎖定") {
+        guard let device, supports(.deviceLock), !isBusy else { return }
+        runCommand(String(localized: "Locking device"), successMessage: String(localized: "Device locked")) {
             try await device.lock()
         }
     }
 
     func unlockDevice() {
-        guard let device, supports(.deviceLock) else { return }
-        runCommand("裝置已解鎖") {
+        guard let device, supports(.deviceLock), !isBusy else { return }
+        runCommand(String(localized: "Unlocking device"), successMessage: String(localized: "Device unlocked")) {
             try await device.unlock()
         }
     }
 
     func pulseFindMyIQOS() {
-        guard let device else { return }
-        runCommand("已送出尋找裝置指令") {
+        guard let device, !isBusy else { return }
+        runCommand(String(localized: "Finding device"), successMessage: String(localized: "Find device command sent")) {
             try await device.startFindMyIQOS()
             try await Task.sleep(nanoseconds: 2_000_000_000)
             try await device.stopFindMyIQOS()
@@ -576,9 +1193,19 @@ final class IQOSToolViewModel: ObservableObject {
             autoStartEnabled = (try? await device.readAutoStartEnabled()) ?? autoStartEnabled
         }
 
+        if supports(.vibration) {
+            vibrationSettings = (try? await device.readVibrationSettings()) ?? vibrationSettings
+        }
+
         diagnostics = try? await device.readDiagnosis()
+        updateTodayUsageWidget()
         status = try? await device.readDeviceStatus()
-        statusText = "資料已更新"
+        statusText = String(localized: "Data updated")
+    }
+
+    private func updateTodayUsageWidget() {
+        guard let totalSmokingCount = diagnostics?.totalSmokingCount else { return }
+        TodayUsageStore.update(totalSmokingCount: totalSmokingCount)
     }
 
     private func startRSSIMonitoring() {
@@ -615,8 +1242,9 @@ final class IQOSToolViewModel: ObservableObject {
         }
     }
 
-    private func runCommand(_ successMessage: String, operation: @escaping () async throws -> Void) {
+    private func runCommand(_ workingMessage: String, successMessage: String, operation: @escaping () async throws -> Void) {
         isBusy = true
+        statusText = workingMessage
         Task {
             do {
                 try await operation()
@@ -631,6 +1259,73 @@ final class IQOSToolViewModel: ObservableObject {
     private func show(_ error: Error) {
         errorMessage = String(describing: error)
         isShowingError = true
+    }
+
+    private func beginBackgroundRefresh() {
+#if canImport(UIKit)
+        guard backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Known IQOS Usage Refresh") { [weak self] in
+            guard let self else { return }
+            knownDeviceRefreshTask?.cancel()
+            endBackgroundRefresh()
+        }
+#endif
+    }
+
+    private func endBackgroundRefresh() {
+#if canImport(UIKit)
+        guard backgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
+#endif
+    }
+}
+
+private enum KnownIQOSDeviceStore {
+    private static let identifierKey = "knownIQOSDevice.identifier"
+    private static let localNameKey = "knownIQOSDevice.localName"
+
+    static func save(_ device: IQOSConnectedDevice) {
+        UserDefaults.standard.set(device.identifier.uuidString, forKey: identifierKey)
+        UserDefaults.standard.set(device.localName, forKey: localNameKey)
+    }
+
+    static func load() -> (identifier: UUID, localName: String?)? {
+        guard let rawIdentifier = UserDefaults.standard.string(forKey: identifierKey),
+              let identifier = UUID(uuidString: rawIdentifier) else {
+            return nil
+        }
+        return (identifier, UserDefaults.standard.string(forKey: localNameKey))
+    }
+}
+
+private enum AppSettingsStore {
+    private static let backgroundUsageRefreshKey = "settings.backgroundUsageRefreshEnabled"
+
+    static var backgroundUsageRefreshEnabled: Bool {
+        get {
+            UserDefaults.standard.bool(forKey: backgroundUsageRefreshKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: backgroundUsageRefreshKey)
+        }
+    }
+}
+
+private enum ComplianceGateStore {
+    private static let statusKey = "compliance.status"
+
+    static var status: ComplianceStatus {
+        get {
+            guard let rawValue = UserDefaults.standard.string(forKey: statusKey),
+                  let status = ComplianceStatus(rawValue: rawValue) else {
+                return .pending
+            }
+            return status
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: statusKey)
+        }
     }
 }
 
@@ -654,10 +1349,6 @@ private extension IQOSDiscoveredDevice {
 private extension IQOSConnectedDevice {
     var displayName: String {
         localName?.isEmpty == false ? localName! : "IQOS \(identifier.uuidString.prefix(4))"
-    }
-
-    var rssiText: String {
-        "--"
     }
 }
 
