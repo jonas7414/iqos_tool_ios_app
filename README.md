@@ -117,7 +117,7 @@ Run protocol parser tests from Xcode or with an available simulator destination.
 This project is an iOS/Swift adaptation inspired by:
 
 - [`hauntedfail/iqos_cli`](https://github.com/hauntedfail/iqos_cli) - Rust CLI for IQOS BLE control
-- [`V-VX/iqos`](https://github.com/V-VX/iqos) - IQOS protocol and BLE logic used by the CLI ecosystem
+- [`hauntedfail/iqos`](https://github.com/hauntedfail/iqos) - IQOS protocol and BLE logic used by the CLI ecosystem
 
 The CLI shell, desktop BLE adapter, command parser, and terminal workflow were
 not copied into this app. The device-facing behavior was rewritten for Swift,
