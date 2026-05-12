@@ -87,6 +87,11 @@ SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名�
 | ------ | ------------- | --------- | ---- |
 | v1.0.2 | iOS 26.4      | iOS 26.4  | 支援 |
 
+## 已知問題
+
+1. SideStore 安裝時，桌面小工具可能無法顯示本日根數、電量或更新時間。原因是 SideStore 重新簽名後可能沒有授權 App Group，主 App 與 Widget 無法共享資料；若 Debug ZIP 顯示 `widgetAppGroupCandidates` 皆為 `unavailable`，即屬於此限制。
+2. 使用天數顯示數量目前可能不正確，後續版本會再修正診斷資料解析與顯示邏輯。
+
 ## 系統需求
 
 - 已開啟藍牙的 iPhone

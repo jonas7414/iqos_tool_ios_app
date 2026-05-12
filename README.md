@@ -87,6 +87,11 @@ Feature support depends on the connected device model and firmware. Some control
 | ------- | ----------- | --------- | ------ |
 | v1.0.2  | iOS 26.4    | iOS 26.4  | Supported |
 
+## Known Issues
+
+1. Widgets may not show today usage, battery level, or update time when installed through SideStore. SideStore may resign the app without a usable App Group entitlement, which prevents the main app and widget from sharing data. If the debug ZIP shows all `widgetAppGroupCandidates` as `unavailable`, this is the active limitation.
+2. The displayed days-used count may be incorrect. A future release will revisit the diagnostics parsing and display logic.
+
 ## Requirements
 
 - iPhone with Bluetooth enabled
