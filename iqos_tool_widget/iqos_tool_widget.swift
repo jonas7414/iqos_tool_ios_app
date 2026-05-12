@@ -42,10 +42,10 @@ private enum WidgetUsageStore {
     private static var candidateAppGroupIdentifiers: [String] {
         var identifiers = [appGroupIdentifier]
         if let bundleIdentifier = Bundle.main.bundleIdentifier {
-            identifiers.append("group.\(bundleIdentifier)")
             if bundleIdentifier.hasSuffix(".widget") {
                 identifiers.append("group.\(String(bundleIdentifier.dropLast(".widget".count)))")
             }
+            identifiers.append("group.\(bundleIdentifier)")
         }
         return Array(NSOrderedSet(array: identifiers)) as? [String] ?? identifiers
     }

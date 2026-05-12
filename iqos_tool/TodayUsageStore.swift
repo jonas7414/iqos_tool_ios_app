@@ -52,6 +52,25 @@ enum TodayUsageStore {
         WidgetCenter.shared.reloadTimelines(ofKind: controlWidgetKind)
     }
 
+    static func touch(batteryLevel: UInt8? = nil, date: Date = Date()) {
+        var record = loadRecord()
+        if let batteryLevel {
+            record.batteryLevel = batteryLevel
+        }
+        record.lastUpdated = date.timeIntervalSince1970
+        saveRecord(record)
+        WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
+        WidgetCenter.shared.reloadTimelines(ofKind: controlWidgetKind)
+    }
+
+    static var diagnosticSummary: String {
+        candidateAppGroupIdentifiers.map { identifier in
+            let available = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) != nil
+            return "\(identifier): \(available ? "available" : "unavailable")"
+        }
+        .joined(separator: "\n")
+    }
+
     private static func loadRecord() -> UsageRecord {
         guard let fileURL else { return .empty }
         do {
@@ -87,10 +106,10 @@ enum TodayUsageStore {
     private static var candidateAppGroupIdentifiers: [String] {
         var identifiers = [appGroupIdentifier]
         if let bundleIdentifier = Bundle.main.bundleIdentifier {
-            identifiers.append("group.\(bundleIdentifier)")
             if bundleIdentifier.hasSuffix(".widget") {
                 identifiers.append("group.\(String(bundleIdentifier.dropLast(".widget".count)))")
             }
+            identifiers.append("group.\(bundleIdentifier)")
         }
         return Array(NSOrderedSet(array: identifiers)) as? [String] ?? identifiers
     }

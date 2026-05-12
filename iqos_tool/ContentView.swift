@@ -103,11 +103,15 @@ struct ContentView: View {
             Text(viewModel.errorMessage)
         }
         .onAppear {
+            viewModel.touchWidgetCommunication()
             viewModel.refreshKnownDeviceUsageIfPossible()
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active, .background:
+            case .active:
+                viewModel.touchWidgetCommunication()
+                viewModel.refreshKnownDeviceUsageIfPossible()
+            case .background:
                 viewModel.refreshKnownDeviceUsageIfPossible()
             case .inactive:
                 break
@@ -1569,11 +1573,18 @@ final class IQOSToolViewModel: ObservableObject {
     private func updateTodayUsageWidget() {
         guard let totalSmokingCount = diagnostics?.totalSmokingCount else {
             consoleLog("Widget usage update skipped: diagnostics totalSmokingCount is nil")
+            TodayUsageStore.touch(batteryLevel: batteryLevel)
             return
         }
         TodayUsageStore.update(totalSmokingCount: totalSmokingCount, batteryLevel: batteryLevel)
         consoleLog("Widget usage updated with total=\(totalSmokingCount)")
         log("Widget usage updated with total=\(totalSmokingCount)")
+    }
+
+    func touchWidgetCommunication() {
+        TodayUsageStore.touch(batteryLevel: batteryLevel)
+        consoleLog("Widget communication heartbeat written")
+        log("Widget communication heartbeat written")
     }
 
     private func performPendingWidgetActionIfNeeded() {
@@ -1713,6 +1724,8 @@ final class IQOSToolViewModel: ObservableObject {
         lines.append("statusText: \(statusText)")
         lines.append("debugModeEnabled: \(debugModeEnabled)")
         lines.append("backgroundUsageRefreshEnabled: \(backgroundUsageRefreshEnabled)")
+        lines.append("widgetAppGroupCandidates:")
+        lines.append(TodayUsageStore.diagnosticSummary)
         lines.append("isUsageRefreshInProgress: \(isUsageRefreshInProgress)")
         lines.append("lastUsageRefreshAttemptAt: \(lastUsageRefreshAttemptDate.map(Self.debugDateFormatter.string(from:)) ?? "nil")")
         lines.append("lastUsageRefreshFailureAt: \(lastUsageRefreshFailureDate.map(Self.debugDateFormatter.string(from:)) ?? "nil")")
