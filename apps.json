@@ -15,7 +15,7 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0.0.beta",
+          "version": "1.0",
           "buildVersion": "1",
           "date": "2026-05-12",
           "localizedDescription": "Initial beta release with Bluetooth controls, today usage widgets, background refresh, debug export, localization, and SideStore IPA packaging.",
