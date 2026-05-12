@@ -20,7 +20,7 @@
           "date": "2026-05-12",
           "localizedDescription": "Improves SideStore widget communication by prioritizing the shared rewritten App Group and writing an app-open heartbeat.",
           "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.2/iqos_tool-v1.0.2.ipa",
-          "size": 2256831,
+          "size": 2259246,
           "minOSVersion": "26.4"
         }
       ],
