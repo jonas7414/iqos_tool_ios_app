@@ -37,8 +37,12 @@
         ],
         "privacy": [
           {
-            "name": "Bluetooth",
-            "reason": "Connect to nearby supported devices."
+            "name": "NSBluetoothAlwaysUsageDescription",
+            "usageDescription": "This app connects to nearby supported devices over Bluetooth."
+          },
+          {
+            "name": "NSBluetoothUsageDescription",
+            "usageDescription": "This app connects to nearby supported devices over Bluetooth."
           }
         ]
       }
