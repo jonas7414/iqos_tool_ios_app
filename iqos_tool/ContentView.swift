@@ -1573,18 +1573,28 @@ final class IQOSToolViewModel: ObservableObject {
     private func updateTodayUsageWidget() {
         guard let totalSmokingCount = diagnostics?.totalSmokingCount else {
             consoleLog("Widget usage update skipped: diagnostics totalSmokingCount is nil")
-            TodayUsageStore.touch(batteryLevel: batteryLevel)
+            if !TodayUsageStore.touch(batteryLevel: batteryLevel) {
+                consoleLog("Widget usage heartbeat failed: App Group container unavailable")
+            }
             return
         }
-        TodayUsageStore.update(totalSmokingCount: totalSmokingCount, batteryLevel: batteryLevel)
-        consoleLog("Widget usage updated with total=\(totalSmokingCount)")
-        log("Widget usage updated with total=\(totalSmokingCount)")
+        if TodayUsageStore.update(totalSmokingCount: totalSmokingCount, batteryLevel: batteryLevel) {
+            consoleLog("Widget usage updated with total=\(totalSmokingCount)")
+            log("Widget usage updated with total=\(totalSmokingCount)")
+        } else {
+            consoleLog("Widget usage update failed: App Group container unavailable")
+            log("Widget usage update failed: App Group container unavailable")
+        }
     }
 
     func touchWidgetCommunication() {
-        TodayUsageStore.touch(batteryLevel: batteryLevel)
-        consoleLog("Widget communication heartbeat written")
-        log("Widget communication heartbeat written")
+        if TodayUsageStore.touch(batteryLevel: batteryLevel) {
+            consoleLog("Widget communication heartbeat written")
+            log("Widget communication heartbeat written")
+        } else {
+            consoleLog("Widget communication heartbeat failed: App Group container unavailable")
+            log("Widget communication heartbeat failed: App Group container unavailable")
+        }
     }
 
     private func performPendingWidgetActionIfNeeded() {

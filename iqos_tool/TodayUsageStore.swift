@@ -26,7 +26,8 @@ enum TodayUsageStore {
         )
     }
 
-    static func update(totalSmokingCount: UInt16, batteryLevel: UInt8?, date: Date = Date()) {
+    @discardableResult
+    static func update(totalSmokingCount: UInt16, batteryLevel: UInt8?, date: Date = Date()) -> Bool {
         var record = loadRecord()
         let day = dayIdentifier(for: date)
         let currentTotal = Int(totalSmokingCount)
@@ -47,20 +48,27 @@ enum TodayUsageStore {
         record.todayCount = max(currentTotal - baseline, 0)
         record.batteryLevel = batteryLevel
         record.lastUpdated = date.timeIntervalSince1970
-        saveRecord(record)
-        WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
-        WidgetCenter.shared.reloadTimelines(ofKind: controlWidgetKind)
+        let didSave = saveRecord(record)
+        if didSave {
+            WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
+            WidgetCenter.shared.reloadTimelines(ofKind: controlWidgetKind)
+        }
+        return didSave
     }
 
-    static func touch(batteryLevel: UInt8? = nil, date: Date = Date()) {
+    @discardableResult
+    static func touch(batteryLevel: UInt8? = nil, date: Date = Date()) -> Bool {
         var record = loadRecord()
         if let batteryLevel {
             record.batteryLevel = batteryLevel
         }
         record.lastUpdated = date.timeIntervalSince1970
-        saveRecord(record)
-        WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
-        WidgetCenter.shared.reloadTimelines(ofKind: controlWidgetKind)
+        let didSave = saveRecord(record)
+        if didSave {
+            WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
+            WidgetCenter.shared.reloadTimelines(ofKind: controlWidgetKind)
+        }
+        return didSave
     }
 
     static var diagnosticSummary: String {
@@ -81,16 +89,18 @@ enum TodayUsageStore {
         }
     }
 
-    private static func saveRecord(_ record: UsageRecord) {
+    private static func saveRecord(_ record: UsageRecord) -> Bool {
         guard let fileURL else {
             print("[IQOS AUTO REFRESH] Widget usage file write skipped: App Group container unavailable. Tried: \(candidateAppGroupIdentifiers)")
-            return
+            return false
         }
         do {
             let data = try JSONEncoder().encode(record)
             try data.write(to: fileURL, options: [.atomic])
+            return true
         } catch {
             print("[IQOS AUTO REFRESH] Widget usage file write failed: \(error)")
+            return false
         }
     }
 
