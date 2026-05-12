@@ -20,7 +20,7 @@
           "date": "2026-05-12",
           "localizedDescription": "Fixes SideStore widget data sharing after SideStore rewrites app and widget identifiers.",
           "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.1/iqos_tool-v1.0.1.ipa",
-          "size": 2250483,
+          "size": 2256831,
           "minOSVersion": "26.4"
         }
       ],
