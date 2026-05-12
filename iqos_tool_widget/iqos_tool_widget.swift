@@ -1,37 +1,52 @@
+import Foundation
 import SwiftUI
 import WidgetKit
 
 private enum WidgetUsageStore {
     static let appGroupIdentifier = "group.iqos-tool.iqos-tool"
     static let widgetKind = "iqos_today_usage_widget"
+    static let controlWidgetKind = "iqos_control_widget"
 
-    private static let todayCountKey = "todayUsage.count"
-    private static let lastUpdatedKey = "todayUsage.lastUpdated"
+    private static let fileName = "today-usage.json"
+
+    private struct UsageRecord: Codable {
+        let todayCount: Int
+        let batteryLevel: UInt8?
+        let lastUpdated: TimeInterval?
+    }
 
     static func snapshot() -> TodayUsageEntry {
-        let defaults: UserDefaults
-        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) != nil {
-            defaults = UserDefaults(suiteName: appGroupIdentifier) ?? .standard
-        } else {
-            defaults = .standard
+        guard let fileURL else {
+            return TodayUsageEntry(date: Date(), count: 0, batteryLevel: nil, updatedAt: nil)
         }
 
-        let count = defaults.object(forKey: todayCountKey) as? Int ?? 0
-        let updatedTimestamp = defaults.object(forKey: lastUpdatedKey) as? TimeInterval
-        let updatedAt = updatedTimestamp.map(Date.init(timeIntervalSince1970:))
-        return TodayUsageEntry(date: Date(), count: count, updatedAt: updatedAt)
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let record = try JSONDecoder().decode(UsageRecord.self, from: data)
+            let updatedAt = record.lastUpdated.map(Date.init(timeIntervalSince1970:))
+            return TodayUsageEntry(date: Date(), count: record.todayCount, batteryLevel: record.batteryLevel, updatedAt: updatedAt)
+        } catch {
+            return TodayUsageEntry(date: Date(), count: 0, batteryLevel: nil, updatedAt: nil)
+        }
+    }
+
+    private static var fileURL: URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
+            .appendingPathComponent(fileName, isDirectory: false)
     }
 }
 
 struct TodayUsageEntry: TimelineEntry {
     let date: Date
     let count: Int
+    let batteryLevel: UInt8?
     let updatedAt: Date?
 }
 
 struct TodayUsageProvider: TimelineProvider {
     func placeholder(in context: Context) -> TodayUsageEntry {
-        TodayUsageEntry(date: Date(), count: 0, updatedAt: nil)
+        TodayUsageEntry(date: Date(), count: 0, batteryLevel: nil, updatedAt: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TodayUsageEntry) -> Void) {
@@ -49,7 +64,7 @@ struct TodayUsageWidgetView: View {
     var entry: TodayUsageEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "flame")
                     .font(.caption.weight(.semibold))
@@ -60,7 +75,7 @@ struct TodayUsageWidgetView: View {
             }
 
             Text("\(entry.count)")
-                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .font(.system(size: 52, weight: .bold, design: .rounded))
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
 
@@ -86,6 +101,73 @@ struct TodayUsageWidgetView: View {
         }
         return String(format: String(localized: "Updated %@"), updatedAt.formatted(date: .omitted, time: .shortened))
     }
+
+    private var batteryText: String {
+        entry.batteryLevel.map { "\($0)%" } ?? "--"
+    }
+}
+
+struct DeviceControlWidgetView: View {
+    var entry: TodayUsageEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "battery.75percent")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+                Text("Battery")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(batteryText)
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .minimumScaleFactor(0.75)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                Link(destination: URL(string: "iqostool://widget/lock")!) {
+                    Label("Lock", systemImage: "lock.fill")
+                        .labelStyle(.iconOnly)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .accessibilityLabel(Text("Lock"))
+
+                Link(destination: URL(string: "iqostool://widget/unlock")!) {
+                    Label("Unlock", systemImage: "lock.open.fill")
+                        .labelStyle(.iconOnly)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .accessibilityLabel(Text("Unlock"))
+            }
+
+            Text(updatedText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .containerBackground(.background, for: .widget)
+    }
+
+    private var batteryText: String {
+        entry.batteryLevel.map { "\($0)%" } ?? "--"
+    }
+
+    private var updatedText: String {
+        guard let updatedAt = entry.updatedAt else {
+            return String(localized: "Open app to update")
+        }
+        return String(format: String(localized: "Updated %@"), updatedAt.formatted(date: .omitted, time: .shortened))
+    }
 }
 
 struct IQOSTodayUsageWidget: Widget {
@@ -101,9 +183,23 @@ struct IQOSTodayUsageWidget: Widget {
     }
 }
 
+struct IQOSDeviceControlWidget: Widget {
+    let kind = WidgetUsageStore.controlWidgetKind
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: TodayUsageProvider()) { entry in
+            DeviceControlWidgetView(entry: entry)
+        }
+        .configurationDisplayName(Text("IQOS Controls"))
+        .description(Text("Shows battery level and quick lock controls."))
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
 @main
 struct IQOSTodayUsageWidgetBundle: WidgetBundle {
     var body: some Widget {
         IQOSTodayUsageWidget()
+        IQOSDeviceControlWidget()
     }
 }

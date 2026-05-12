@@ -4,43 +4,78 @@ import WidgetKit
 enum TodayUsageStore {
     static let appGroupIdentifier = "group.iqos-tool.iqos-tool"
     static let widgetKind = "iqos_today_usage_widget"
+    private static let controlWidgetKind = "iqos_control_widget"
 
-    private static let dayKey = "todayUsage.day"
-    private static let baselineKey = "todayUsage.baseline"
-    private static let lastTotalKey = "todayUsage.lastTotal"
-    private static let todayCountKey = "todayUsage.count"
-    private static let lastUpdatedKey = "todayUsage.lastUpdated"
+    private static let fileName = "today-usage.json"
 
-    static var defaults: UserDefaults {
-        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) != nil else {
-            return .standard
-        }
-        return UserDefaults(suiteName: appGroupIdentifier) ?? .standard
+    private struct UsageRecord: Codable {
+        var day: String?
+        var baseline: Int?
+        var lastTotal: Int?
+        var todayCount: Int
+        var batteryLevel: UInt8?
+        var lastUpdated: TimeInterval?
+
+        static let empty = UsageRecord(
+            day: nil,
+            baseline: nil,
+            lastTotal: nil,
+            todayCount: 0,
+            batteryLevel: nil,
+            lastUpdated: nil
+        )
     }
 
-    static func update(totalSmokingCount: UInt16, date: Date = Date()) {
-        let defaults = defaults
+    static func update(totalSmokingCount: UInt16, batteryLevel: UInt8?, date: Date = Date()) {
+        var record = loadRecord()
         let day = dayIdentifier(for: date)
         let currentTotal = Int(totalSmokingCount)
-        let storedDay = defaults.string(forKey: dayKey)
-        var baseline = defaults.object(forKey: baselineKey) as? Int ?? currentTotal
+        var baseline = record.baseline ?? currentTotal
 
-        if storedDay != day {
-            let previousTotal = defaults.object(forKey: lastTotalKey) as? Int
-            baseline = previousTotal ?? currentTotal
-            defaults.set(day, forKey: dayKey)
-            defaults.set(baseline, forKey: baselineKey)
+        if record.day != day {
+            baseline = record.lastTotal ?? currentTotal
+            record.day = day
+            record.baseline = baseline
         }
 
         if currentTotal < baseline {
             baseline = currentTotal
-            defaults.set(baseline, forKey: baselineKey)
+            record.baseline = baseline
         }
 
-        defaults.set(currentTotal, forKey: lastTotalKey)
-        defaults.set(max(currentTotal - baseline, 0), forKey: todayCountKey)
-        defaults.set(date.timeIntervalSince1970, forKey: lastUpdatedKey)
+        record.lastTotal = currentTotal
+        record.todayCount = max(currentTotal - baseline, 0)
+        record.batteryLevel = batteryLevel
+        record.lastUpdated = date.timeIntervalSince1970
+        saveRecord(record)
         WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
+        WidgetCenter.shared.reloadTimelines(ofKind: controlWidgetKind)
+    }
+
+    private static func loadRecord() -> UsageRecord {
+        guard let fileURL else { return .empty }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try JSONDecoder().decode(UsageRecord.self, from: data)
+        } catch {
+            return .empty
+        }
+    }
+
+    private static func saveRecord(_ record: UsageRecord) {
+        guard let fileURL else { return }
+        do {
+            let data = try JSONEncoder().encode(record)
+            try data.write(to: fileURL, options: [.atomic])
+        } catch {
+            print("[IQOS AUTO REFRESH] Widget usage file write failed: \(error)")
+        }
+    }
+
+    private static var fileURL: URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
+            .appendingPathComponent(fileName, isDirectory: false)
     }
 
     private static func dayIdentifier(for date: Date) -> String {

@@ -1,7 +1,12 @@
 "IQOS Today" = "IQOS Today";
+"IQOS Controls" = "IQOS Controls";
+"Battery" = "Battery";
+"Lock" = "Lock";
 "Open app to update" = "Open app to update";
+"Shows battery level and quick lock controls." = "Shows battery level and quick lock controls.";
 "Shows today's IQOS usage from the latest app sync." = "Shows today's IQOS usage from the latest app sync.";
 "stick" = "stick";
 "sticks" = "sticks";
 "Today" = "Today";
+"Unlock" = "Unlock";
 "Updated %@" = "Updated %@";

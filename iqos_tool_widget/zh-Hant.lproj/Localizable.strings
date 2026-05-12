@@ -1,7 +1,12 @@
 "IQOS Today" = "IQOS 今日使用";
+"IQOS Controls" = "IQOS 控制";
+"Battery" = "電量";
+"Lock" = "鎖定";
 "Open app to update" = "開啟 App 更新";
+"Shows battery level and quick lock controls." = "顯示電量與快速鎖定控制。";
 "Shows today's IQOS usage from the latest app sync." = "顯示最近同步的今日 IQOS 使用量。";
 "stick" = "根";
 "sticks" = "根";
 "Today" = "今日";
+"Unlock" = "解鎖";
 "Updated %@" = "%@ 更新";

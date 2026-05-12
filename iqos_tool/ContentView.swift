@@ -7,6 +7,7 @@
 
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -113,6 +114,9 @@ struct ContentView: View {
             @unknown default:
                 break
             }
+        }
+        .onOpenURL { url in
+            viewModel.handleWidgetURL(url)
         }
     }
 
@@ -833,11 +837,16 @@ private struct InfoCell: View {
 
 private struct SettingsPanelView: View {
     @ObservedObject var viewModel: IQOSToolViewModel
+    @State private var debugPackageDocument = DebugPackageDocument(data: Data())
+    @State private var isExportingDebugPackage = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Label("Settings", systemImage: "gearshape")
                 .font(.headline)
+                .onTapGesture(count: 10) {
+                    viewModel.enableDebugMode()
+                }
 
             Toggle(isOn: $viewModel.backgroundUsageRefreshEnabled) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -847,6 +856,29 @@ private struct SettingsPanelView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: $viewModel.debugModeEnabled) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Debug Mode")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Collect logs for troubleshooting and export a debug ZIP")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Button {
+                    debugPackageDocument = DebugPackageDocument(data: viewModel.makeDebugPackage())
+                    isExportingDebugPackage = true
+                } label: {
+                    Label("Export Debug ZIP", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
             }
             .padding(14)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -863,24 +895,219 @@ private struct SettingsPanelView: View {
             .padding(14)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            HStack(spacing: 12) {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                Text("Settings content will be added later")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            Link(destination: Self.issueReportURL) {
+                HStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.bubble")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Report an Issue")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text("Open GitHub Issues to report bugs")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "arrow.up.forward")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(14)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .padding(14)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            if viewModel.debugModeEnabled {
+                DebugLogPanelView(viewModel: viewModel)
+            }
         }
         .panelStyle()
+        .fileExporter(
+            isPresented: $isExportingDebugPackage,
+            document: debugPackageDocument,
+            contentType: .zip,
+            defaultFilename: "iqos-debug-\(Self.debugExportDateFormatter.string(from: Date()))"
+        ) { result in
+            if case let .failure(error) = result {
+                viewModel.showExportError(error)
+            }
+        }
+    }
+
+    private static let debugExportDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
+
+    private static let issueReportURL = URL(string: "https://github.com/jonas7414/iqos_tool_ios_app/issues")!
+}
+
+private struct DebugLogPanelView: View {
+    @ObservedObject var viewModel: IQOSToolViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Debug Log", systemImage: "ladybug")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button {
+                    viewModel.clearDebugLogs()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel(Text("Clear Debug Log"))
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    if viewModel.debugLogs.isEmpty {
+                        Text("No debug logs")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(viewModel.debugLogs.indices, id: \.self) { index in
+                            Text(viewModel.debugLogs[index])
+                                .font(.caption.monospaced())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minHeight: 160, maxHeight: 260)
+            .padding(10)
+            .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct DebugPackageDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.zip] }
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private enum DebugZIPBuilder {
+    struct FileEntry {
+        let path: String
+        let data: Data
+    }
+
+    static func archive(files: [FileEntry]) -> Data {
+        var archive = Data()
+        var centralDirectory = Data()
+        var centralDirectoryRecords = 0
+
+        for file in files {
+            let nameData = Data(file.path.utf8)
+            let crc = CRC32.checksum(file.data)
+            let localHeaderOffset = UInt32(archive.count)
+            let size = UInt32(file.data.count)
+
+            archive.appendUInt32LE(0x04034b50)
+            archive.appendUInt16LE(20)
+            archive.appendUInt16LE(0)
+            archive.appendUInt16LE(0)
+            archive.appendUInt16LE(0)
+            archive.appendUInt16LE(0)
+            archive.appendUInt32LE(crc)
+            archive.appendUInt32LE(size)
+            archive.appendUInt32LE(size)
+            archive.appendUInt16LE(UInt16(nameData.count))
+            archive.appendUInt16LE(0)
+            archive.append(nameData)
+            archive.append(file.data)
+
+            centralDirectory.appendUInt32LE(0x02014b50)
+            centralDirectory.appendUInt16LE(20)
+            centralDirectory.appendUInt16LE(20)
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt32LE(crc)
+            centralDirectory.appendUInt32LE(size)
+            centralDirectory.appendUInt32LE(size)
+            centralDirectory.appendUInt16LE(UInt16(nameData.count))
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt16LE(0)
+            centralDirectory.appendUInt32LE(0)
+            centralDirectory.appendUInt32LE(localHeaderOffset)
+            centralDirectory.append(nameData)
+            centralDirectoryRecords += 1
+        }
+
+        let centralDirectoryOffset = UInt32(archive.count)
+        archive.append(centralDirectory)
+        archive.appendUInt32LE(0x06054b50)
+        archive.appendUInt16LE(0)
+        archive.appendUInt16LE(0)
+        archive.appendUInt16LE(UInt16(centralDirectoryRecords))
+        archive.appendUInt16LE(UInt16(centralDirectoryRecords))
+        archive.appendUInt32LE(UInt32(centralDirectory.count))
+        archive.appendUInt32LE(centralDirectoryOffset)
+        archive.appendUInt16LE(0)
+        return archive
+    }
+}
+
+private enum CRC32 {
+    private static let table: [UInt32] = (0..<256).map { value in
+        var crc = UInt32(value)
+        for _ in 0..<8 {
+            crc = (crc & 1) == 1 ? (0xedb88320 ^ (crc >> 1)) : (crc >> 1)
+        }
+        return crc
+    }
+
+    static func checksum(_ data: Data) -> UInt32 {
+        var crc: UInt32 = 0xffffffff
+        for byte in data {
+            let index = Int((crc ^ UInt32(byte)) & 0xff)
+            crc = table[index] ^ (crc >> 8)
+        }
+        return crc ^ 0xffffffff
+    }
+}
+
+private extension Data {
+    mutating func appendUInt16LE(_ value: UInt16) {
+        append(UInt8(value & 0xff))
+        append(UInt8((value >> 8) & 0xff))
+    }
+
+    mutating func appendUInt32LE(_ value: UInt32) {
+        append(UInt8(value & 0xff))
+        append(UInt8((value >> 8) & 0xff))
+        append(UInt8((value >> 16) & 0xff))
+        append(UInt8((value >> 24) & 0xff))
     }
 }
 
 @MainActor
 final class IQOSToolViewModel: ObservableObject {
+    private enum WidgetDeviceAction {
+        case lock
+        case unlock
+    }
+
     @Published var discoveredDevices: [IQOSDiscoveredDevice] = []
     @Published var connectedDevice: IQOSConnectedDevice?
     @Published var batteryLevel: UInt8?
@@ -906,18 +1133,30 @@ final class IQOSToolViewModel: ObservableObject {
     @Published var connectingDeviceID: UUID?
     @Published var isShowingError = false
     @Published var errorMessage = ""
+    @Published var debugModeEnabled = AppSettingsStore.debugModeEnabled {
+        didSet {
+            AppSettingsStore.debugModeEnabled = debugModeEnabled
+            if debugModeEnabled {
+                log("Debug mode enabled")
+            } else {
+                consoleLog("Debug mode disabled")
+            }
+        }
+    }
+    @Published var debugLogs: [String] = []
     @Published var backgroundUsageRefreshEnabled = AppSettingsStore.backgroundUsageRefreshEnabled {
         didSet {
             AppSettingsStore.backgroundUsageRefreshEnabled = backgroundUsageRefreshEnabled
+            consoleLog("Background update setting changed: \(backgroundUsageRefreshEnabled)")
+            log("Background update \(backgroundUsageRefreshEnabled ? "enabled" : "disabled")")
             if backgroundUsageRefreshEnabled {
                 if let connectedDevice {
                     KnownIQOSDeviceStore.save(connectedDevice)
                 }
+                startAutomaticUsageRefresh()
                 refreshKnownDeviceUsageIfPossible()
             } else {
-                knownDeviceRefreshTask?.cancel()
-                knownDeviceRefreshTask = nil
-                endBackgroundRefresh()
+                stopAutomaticUsageRefresh()
             }
         }
     }
@@ -927,9 +1166,17 @@ final class IQOSToolViewModel: ObservableObject {
     private var scanTask: Task<Void, Never>?
     private var rssiMonitorTask: Task<Void, Never>?
     private var knownDeviceRefreshTask: Task<Void, Never>?
+    private var automaticUsageRefreshTask: Task<Void, Never>?
+    private var pendingWidgetAction: WidgetDeviceAction?
 #if canImport(UIKit)
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 #endif
+
+    init() {
+        if backgroundUsageRefreshEnabled {
+            startAutomaticUsageRefresh()
+        }
+    }
 
     var batteryText: String {
         batteryLevel.map { "\($0)%" } ?? "--"
@@ -954,6 +1201,7 @@ final class IQOSToolViewModel: ObservableObject {
     }
 
     func startScan() {
+        log("Scan requested")
         rssiMonitorTask?.cancel()
         scanTask?.cancel()
         discoveredDevices = []
@@ -964,8 +1212,10 @@ final class IQOSToolViewModel: ObservableObject {
             guard let self else { return }
             for await discovered in client.scan(timeout: 8) {
                 guard !Task.isCancelled else { break }
+                log("Discovered \(discovered.displayName), RSSI \(discovered.rssiText)")
                 upsert(discovered)
             }
+            log("Scan finished with \(discoveredDevices.count) device(s)")
             isScanning = false
             if connectedDevice == nil {
                 statusText = discoveredDevices.isEmpty ? String(localized: "No IQOS devices found") : String(localized: "Select a device to connect")
@@ -976,6 +1226,7 @@ final class IQOSToolViewModel: ObservableObject {
     }
 
     func connect(to discoveredDevice: IQOSDiscoveredDevice) {
+        log("Connect requested for \(discoveredDevice.displayName)")
         connectingDeviceID = discoveredDevice.id
         isConnecting = true
         statusText = String(format: String(localized: "Connecting to %@"), discoveredDevice.displayName)
@@ -990,11 +1241,15 @@ final class IQOSToolViewModel: ObservableObject {
                 connectedRSSI = discoveredDevice.rssi
                 if backgroundUsageRefreshEnabled {
                     KnownIQOSDeviceStore.save(summary)
+                    startAutomaticUsageRefresh()
                 }
+                log("Connected to \(summary.displayName), model \(summary.model.displayName)")
                 statusText = String(localized: "Connected")
                 try await refreshAll()
+                performPendingWidgetActionIfNeeded()
                 startRSSIMonitoring()
             } catch {
+                log("Connect failed: \(error)")
                 show(error)
                 statusText = String(localized: "Connection failed")
             }
@@ -1005,18 +1260,28 @@ final class IQOSToolViewModel: ObservableObject {
 
     func refreshConnectedDevice() {
         guard device != nil else { return }
+        log("Refresh connected device requested")
         Task {
             do {
                 try await refreshAll()
             } catch {
+                log("Refresh connected device failed: \(error)")
                 show(error)
             }
         }
     }
 
     func refreshKnownDeviceUsageIfPossible() {
-        guard backgroundUsageRefreshEnabled else { return }
-        guard !isConnecting, !isBusy else { return }
+        guard backgroundUsageRefreshEnabled else {
+            consoleLog("Automatic usage refresh skipped: background update is disabled")
+            return
+        }
+        guard !isConnecting, !isBusy else {
+            consoleLog("Automatic usage refresh skipped: isConnecting=\(isConnecting), isBusy=\(isBusy)")
+            return
+        }
+        consoleLog("Automatic usage refresh requested")
+        log("Known device background refresh requested")
 
         if let device {
             knownDeviceRefreshTask?.cancel()
@@ -1027,10 +1292,14 @@ final class IQOSToolViewModel: ObservableObject {
 
                 do {
                     diagnostics = try await device.readDiagnosis()
-                    updateTodayUsageWidget()
                     batteryLevel = try? await device.readBatteryLevel()
+                    updateTodayUsageWidget()
+                    consoleLog("Automatic usage refresh succeeded on connected device")
+                    log("Known connected device usage refreshed")
                     statusText = String(localized: "Today usage updated")
                 } catch {
+                    consoleLog("Automatic usage refresh failed on connected device: \(error)")
+                    log("Known connected device refresh failed: \(error)")
                     if connectedDevice == nil {
                         statusText = String(localized: "Search for and connect to a nearby IQOS device")
                     }
@@ -1039,13 +1308,23 @@ final class IQOSToolViewModel: ObservableObject {
             return
         }
 
-        guard let knownDevice = KnownIQOSDeviceStore.load() else { return }
+        guard let knownDevice = KnownIQOSDeviceStore.load() else {
+            consoleLog("Automatic usage refresh skipped: no known device saved")
+            return
+        }
+        consoleLog("Automatic usage refresh will reconnect known device: \(knownDevice.identifier.uuidString)")
+        log("Loaded known device \(knownDevice.identifier.uuidString)")
 
         knownDeviceRefreshTask?.cancel()
         knownDeviceRefreshTask = Task { [weak self] in
             guard let self else { return }
             beginBackgroundRefresh()
-            defer { endBackgroundRefresh() }
+            isConnecting = true
+            statusText = String(format: String(localized: "Connecting to %@"), knownDevice.localName ?? knownDevice.identifier.uuidString)
+            defer {
+                isConnecting = false
+                endBackgroundRefresh()
+            }
 
             do {
                 let connected = try await client.connectToKnownDevice(
@@ -1057,15 +1336,24 @@ final class IQOSToolViewModel: ObservableObject {
 
                 device = connected
                 connectedDevice = connected.connectedDevice
+                connectedRSSI = nil
                 if backgroundUsageRefreshEnabled {
                     KnownIQOSDeviceStore.save(connected.connectedDevice)
+                    startAutomaticUsageRefresh()
                 }
 
-                diagnostics = try? await connected.readDiagnosis()
-                updateTodayUsageWidget()
-                batteryLevel = try? await connected.readBatteryLevel()
+                consoleLog("Known device attached to UI: \(connected.connectedDevice.displayName)")
+                log("Known device attached to UI: \(connected.connectedDevice.displayName)")
+                statusText = String(localized: "Connected")
+                startRSSIMonitoring()
+                try await refreshAll()
+                performPendingWidgetActionIfNeeded()
+                consoleLog("Automatic usage refresh succeeded after reconnect")
+                log("Known device reconnected and usage refreshed")
                 statusText = String(localized: "Today usage updated")
             } catch {
+                consoleLog("Automatic usage refresh failed after reconnect: \(error)")
+                log("Known device refresh failed: \(error)")
                 if connectedDevice == nil {
                     statusText = String(localized: "Search for and connect to a nearby IQOS device")
                 }
@@ -1075,14 +1363,17 @@ final class IQOSToolViewModel: ObservableObject {
 
     func refreshDiagnostics() {
         guard let device else { return }
+        log("Diagnostics refresh requested")
         isBusy = true
         Task {
             do {
                 diagnostics = try await device.readDiagnosis()
                 updateTodayUsageWidget()
                 status = try? await device.readDeviceStatus()
+                log("Diagnostics refreshed: total=\(diagnostics?.totalSmokingCount.map(String.init) ?? "nil"), days=\(diagnostics?.daysUsed.map(String.init) ?? "nil")")
                 statusText = String(localized: "Diagnostics updated")
             } catch {
+                log("Diagnostics refresh failed: \(error)")
                 show(error)
             }
             isBusy = false
@@ -1091,6 +1382,7 @@ final class IQOSToolViewModel: ObservableObject {
 
     func setBrightness(_ level: IQOSBrightnessLevel) {
         guard let device, supports(.brightness), !isBusy else { return }
+        log("Set brightness requested: \(level.rawValue)")
         runCommand(String(localized: "Applying LED brightness"), successMessage: String(localized: "Brightness updated")) {
             try await device.setBrightness(level)
         }
@@ -1098,6 +1390,7 @@ final class IQOSToolViewModel: ObservableObject {
 
     func setFlexPuff(_ enabled: Bool) {
         guard let device, supports(.flexPuff), !isBusy else { return }
+        log("Set FlexPuff requested: \(enabled)")
         runCommand(String(localized: "Updating FlexPuff"), successMessage: String(localized: "FlexPuff updated")) {
             try await device.setFlexPuffEnabled(enabled)
         }
@@ -1106,6 +1399,7 @@ final class IQOSToolViewModel: ObservableObject {
     func setFlexBatterySettings() {
         guard let device, supports(.flexBattery), !isBusy else { return }
         let settings = IQOSFlexBatterySettings(mode: flexBatteryMode, pauseMode: pauseModeEnabled)
+        log("Set battery settings requested: mode=\(settings.mode.rawValue), pause=\(settings.pauseMode.map(String.init) ?? "nil")")
         runCommand(String(localized: "Updating battery mode"), successMessage: String(localized: "Battery settings updated")) {
             try await device.setFlexBatterySettings(settings)
         }
@@ -1119,6 +1413,7 @@ final class IQOSToolViewModel: ObservableObject {
 
     func setAutoStart(_ enabled: Bool) {
         guard let device, supports(.autoStart), !isBusy else { return }
+        log("Set Auto Start requested: \(enabled)")
         runCommand(String(localized: "Updating Auto Start"), successMessage: String(localized: "Auto Start updated")) {
             try await device.setAutoStartEnabled(enabled)
         }
@@ -1126,6 +1421,7 @@ final class IQOSToolViewModel: ObservableObject {
 
     func setSmartGesture(_ enabled: Bool) {
         guard let device, supports(.smartGesture), !isBusy else { return }
+        log("Set Smart Gesture requested: \(enabled)")
         runCommand(String(localized: "Updating Smart Gesture"), successMessage: String(localized: "Smart Gesture updated")) {
             try await device.setSmartGestureEnabled(enabled)
         }
@@ -1135,6 +1431,7 @@ final class IQOSToolViewModel: ObservableObject {
         guard let device, supports(.vibration), !isBusy else { return }
         vibrationSettings[keyPath: keyPath] = enabled
         let settings = vibrationSettings
+        log("Set vibration requested: \(settings)")
         runCommand(String(localized: "Updating vibration"), successMessage: String(localized: "Vibration updated")) {
             try await device.setVibrationSettings(settings)
         }
@@ -1144,6 +1441,7 @@ final class IQOSToolViewModel: ObservableObject {
         guard let device, supports(.chargeStartVibration), !isBusy else { return }
         vibrationSettings.whenChargingStart = enabled
         let settings = vibrationSettings
+        log("Set charge start vibration requested: \(enabled)")
         runCommand(String(localized: "Updating vibration"), successMessage: String(localized: "Vibration updated")) {
             try await device.setVibrationSettings(settings)
         }
@@ -1151,6 +1449,7 @@ final class IQOSToolViewModel: ObservableObject {
 
     func lockDevice() {
         guard let device, supports(.deviceLock), !isBusy else { return }
+        log("Lock requested")
         runCommand(String(localized: "Locking device"), successMessage: String(localized: "Device locked")) {
             try await device.lock()
         }
@@ -1158,6 +1457,7 @@ final class IQOSToolViewModel: ObservableObject {
 
     func unlockDevice() {
         guard let device, supports(.deviceLock), !isBusy else { return }
+        log("Unlock requested")
         runCommand(String(localized: "Unlocking device"), successMessage: String(localized: "Device unlocked")) {
             try await device.unlock()
         }
@@ -1165,6 +1465,7 @@ final class IQOSToolViewModel: ObservableObject {
 
     func pulseFindMyIQOS() {
         guard let device, !isBusy else { return }
+        log("Find requested")
         runCommand(String(localized: "Finding device"), successMessage: String(localized: "Find device command sent")) {
             try await device.startFindMyIQOS()
             try await Task.sleep(nanoseconds: 2_000_000_000)
@@ -1172,12 +1473,36 @@ final class IQOSToolViewModel: ObservableObject {
         }
     }
 
+    func handleWidgetURL(_ url: URL) {
+        guard url.scheme == "iqostool", url.host == "widget" else { return }
+        let action: WidgetDeviceAction?
+        switch url.path {
+        case "/lock":
+            action = .lock
+        case "/unlock":
+            action = .unlock
+        default:
+            action = nil
+        }
+
+        guard let action else { return }
+        consoleLog("Widget action requested: \(url.path)")
+        if device != nil {
+            performWidgetAction(action)
+        } else {
+            pendingWidgetAction = action
+            refreshKnownDeviceUsageIfPossible()
+        }
+    }
+
     private func refreshAll() async throws {
         guard let device else { return }
+        log("Full refresh started")
         isBusy = true
         defer { isBusy = false }
 
         batteryLevel = try? await device.readBatteryLevel()
+        log("Battery level: \(batteryLevel.map(String.init) ?? "nil")")
         selectedBrightness = (try? await device.readBrightness()) ?? selectedBrightness
 
         if supports(.flexPuff) {
@@ -1200,12 +1525,60 @@ final class IQOSToolViewModel: ObservableObject {
         diagnostics = try? await device.readDiagnosis()
         updateTodayUsageWidget()
         status = try? await device.readDeviceStatus()
+        log("Full refresh finished")
         statusText = String(localized: "Data updated")
     }
 
     private func updateTodayUsageWidget() {
-        guard let totalSmokingCount = diagnostics?.totalSmokingCount else { return }
-        TodayUsageStore.update(totalSmokingCount: totalSmokingCount)
+        guard let totalSmokingCount = diagnostics?.totalSmokingCount else {
+            consoleLog("Widget usage update skipped: diagnostics totalSmokingCount is nil")
+            return
+        }
+        TodayUsageStore.update(totalSmokingCount: totalSmokingCount, batteryLevel: batteryLevel)
+        consoleLog("Widget usage updated with total=\(totalSmokingCount)")
+        log("Widget usage updated with total=\(totalSmokingCount)")
+    }
+
+    private func performPendingWidgetActionIfNeeded() {
+        guard let action = pendingWidgetAction else { return }
+        pendingWidgetAction = nil
+        performWidgetAction(action)
+    }
+
+    private func performWidgetAction(_ action: WidgetDeviceAction) {
+        switch action {
+        case .lock:
+            lockDevice()
+        case .unlock:
+            unlockDevice()
+        }
+    }
+
+    private func startAutomaticUsageRefresh() {
+        guard automaticUsageRefreshTask == nil else { return }
+        consoleLog("Automatic usage refresh loop started")
+        log("Automatic usage refresh started")
+
+        automaticUsageRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                guard !Task.isCancelled else { break }
+                guard backgroundUsageRefreshEnabled else { continue }
+                consoleLog("Automatic usage refresh loop tick")
+                refreshKnownDeviceUsageIfPossible()
+            }
+        }
+    }
+
+    private func stopAutomaticUsageRefresh() {
+        consoleLog("Automatic usage refresh loop stopped")
+        log("Automatic usage refresh stopped")
+        automaticUsageRefreshTask?.cancel()
+        automaticUsageRefreshTask = nil
+        knownDeviceRefreshTask?.cancel()
+        knownDeviceRefreshTask = nil
+        endBackgroundRefresh()
     }
 
     private func startRSSIMonitoring() {
@@ -1245,11 +1618,14 @@ final class IQOSToolViewModel: ObservableObject {
     private func runCommand(_ workingMessage: String, successMessage: String, operation: @escaping () async throws -> Void) {
         isBusy = true
         statusText = workingMessage
+        log("Command started: \(workingMessage)")
         Task {
             do {
                 try await operation()
                 statusText = successMessage
+                log("Command succeeded: \(successMessage)")
             } catch {
+                log("Command failed: \(error)")
                 show(error)
             }
             isBusy = false
@@ -1257,9 +1633,112 @@ final class IQOSToolViewModel: ObservableObject {
     }
 
     private func show(_ error: Error) {
+        log("Error shown: \(error)")
         errorMessage = String(describing: error)
         isShowingError = true
     }
+
+    func enableDebugMode() {
+        guard !debugModeEnabled else {
+            log("Debug mode already enabled")
+            return
+        }
+        debugModeEnabled = true
+    }
+
+    func clearDebugLogs() {
+        debugLogs.removeAll()
+        log("Debug log cleared")
+    }
+
+    func showExportError(_ error: Error) {
+        show(error)
+    }
+
+    func makeDebugPackage() -> Data {
+        log("Debug package export requested")
+        let logText = debugLogs.isEmpty ? "No debug logs\n" : debugLogs.joined(separator: "\n") + "\n"
+        let stateText = debugStateText()
+        return DebugZIPBuilder.archive(files: [
+            DebugZIPBuilder.FileEntry(path: "debug-log.txt", data: Data(logText.utf8)),
+            DebugZIPBuilder.FileEntry(path: "app-state.txt", data: Data(stateText.utf8))
+        ])
+    }
+
+    private func debugStateText() -> String {
+        var lines: [String] = []
+        lines.append("generatedAt: \(Self.debugDateFormatter.string(from: Date()))")
+        lines.append("statusText: \(statusText)")
+        lines.append("debugModeEnabled: \(debugModeEnabled)")
+        lines.append("backgroundUsageRefreshEnabled: \(backgroundUsageRefreshEnabled)")
+        lines.append("isScanning: \(isScanning)")
+        lines.append("isConnecting: \(isConnecting)")
+        lines.append("isBusy: \(isBusy)")
+        lines.append("connectedDevice:")
+        if let connectedDevice {
+            lines.append("  name: \(connectedDevice.displayName)")
+            lines.append("  id: \(connectedDevice.identifier.uuidString)")
+            lines.append("  model: \(connectedDevice.model.displayName)")
+        } else {
+            lines.append("  nil")
+        }
+        if let batteryLevel {
+            lines.append("batteryLevel: \(batteryLevel)")
+        } else {
+            lines.append("batteryLevel: nil")
+        }
+        if let connectedRSSI {
+            lines.append("connectedRSSI: \(connectedRSSI)")
+        } else {
+            lines.append("connectedRSSI: nil")
+        }
+        if let totalSmokingCount = diagnostics?.totalSmokingCount {
+            lines.append("diagnostics.totalSmokingCount: \(totalSmokingCount)")
+        } else {
+            lines.append("diagnostics.totalSmokingCount: nil")
+        }
+        if let daysUsed = diagnostics?.daysUsed {
+            lines.append("diagnostics.daysUsed: \(daysUsed)")
+        } else {
+            lines.append("diagnostics.daysUsed: nil")
+        }
+        if let batteryVoltage = diagnostics?.batteryVoltage {
+            lines.append("diagnostics.batteryVoltage: \(batteryVoltage)")
+        } else {
+            lines.append("diagnostics.batteryVoltage: nil")
+        }
+        lines.append("flexBatteryMode: \(flexBatteryMode.rawValue)")
+        lines.append("pauseModeEnabled: \(pauseModeEnabled)")
+        lines.append("autoStartEnabled: \(autoStartEnabled)")
+        lines.append("smartGestureEnabled: \(smartGestureEnabled)")
+        lines.append("discoveredDeviceCount: \(discoveredDevices.count)")
+        lines.append("discoveredDevices:")
+        for device in discoveredDevices {
+            lines.append("  - \(device.displayName) \(device.id.uuidString) RSSI=\(device.rssiText)")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private func log(_ message: String) {
+        guard debugModeEnabled else { return }
+        let timestamp = Self.debugDateFormatter.string(from: Date())
+        let line = "[\(timestamp)] \(message)"
+        debugLogs.append(line)
+        if debugLogs.count > 250 {
+            debugLogs.removeFirst(debugLogs.count - 250)
+        }
+        print("[IQOS DEBUG] \(line)")
+    }
+
+    private func consoleLog(_ message: String) {
+        print("[IQOS AUTO REFRESH] \(message)")
+    }
+
+    private static let debugDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
 
     private func beginBackgroundRefresh() {
 #if canImport(UIKit)
@@ -1301,6 +1780,7 @@ private enum KnownIQOSDeviceStore {
 
 private enum AppSettingsStore {
     private static let backgroundUsageRefreshKey = "settings.backgroundUsageRefreshEnabled"
+    private static let debugModeKey = "settings.debugModeEnabled"
 
     static var backgroundUsageRefreshEnabled: Bool {
         get {
@@ -1308,6 +1788,15 @@ private enum AppSettingsStore {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: backgroundUsageRefreshKey)
+        }
+    }
+
+    static var debugModeEnabled: Bool {
+        get {
+            UserDefaults.standard.bool(forKey: debugModeKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: debugModeKey)
         }
     }
 }
