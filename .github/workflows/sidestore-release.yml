@@ -1,0 +1,64 @@
+name: SideStore Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-sidestore-ipa:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build unsigned iPhoneOS app
+        working-directory: iqos_tool
+        run: |
+          xcodebuild \
+            -project iqos_tool.xcodeproj \
+            -scheme iqos_tool \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/iqos_tool.app"
+          IPA_NAME="iqos_tool-${GITHUB_REF_NAME:-manual}.ipa"
+
+          test -d "$APP_PATH"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
+
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/$IPA_NAME" Payload
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidestore-ipa
+          path: "*.ipa"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.ipa"
+          body: |
+            SideStore-compatible unsigned IPA.
+
+            Notes:
+            - Install this IPA through SideStore so it can be signed on-device.
+            - This app includes a widget extension and App Group entitlement. SideStore may require extra App ID capacity for the extension, and widget/App Group behavior depends on the signing account and SideStore's resigning support.
