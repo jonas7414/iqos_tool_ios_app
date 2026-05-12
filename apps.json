@@ -1,0 +1,56 @@
+{
+  "name": "IQ Tool",
+  "identifier": "com.jonas7414.iqtool.source",
+  "sourceURL": "https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/apps.json",
+  "apps": [
+    {
+      "name": "IQ Tool",
+      "bundleIdentifier": "iqos-tool.iqos-tool",
+      "developerName": "jonas7414",
+      "subtitle": "Bluetooth utility and widgets",
+      "localizedDescription": "IQ Tool is an educational and research utility for connecting to supported devices, viewing usage data, using widgets, and exporting debug reports.",
+      "iconURL": "https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/iqos_tool/Assets.xcassets/AppIcon.appiconset/ChatGPT%20Image%20May%2011%2C%202026%20at%2004_25_12%20PM-2-2-2.png",
+      "tintColor": "0A84FF",
+      "category": "utilities",
+      "screenshots": [],
+      "versions": [
+        {
+          "version": "1.0.0.beta",
+          "buildVersion": "1",
+          "date": "2026-05-12",
+          "localizedDescription": "Initial beta release with Bluetooth controls, today usage widgets, background refresh, debug export, localization, and SideStore IPA packaging.",
+          "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0.beta/iqos_tool-v1.0.0.beta.ipa",
+          "size": 2241523,
+          "minOSVersion": "26.4"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          {
+            "name": "App Groups",
+            "reason": "Share today usage and battery data between the main app and widgets."
+          },
+          {
+            "name": "Background Modes",
+            "reason": "Allow background Bluetooth refresh when iOS permits it."
+          }
+        ],
+        "privacy": [
+          {
+            "name": "Bluetooth",
+            "reason": "Connect to nearby supported devices."
+          }
+        ]
+      }
+    }
+  ],
+  "news": [
+    {
+      "title": "IQ Tool 1.0.0 beta",
+      "identifier": "iq-tool-1.0.0.beta",
+      "caption": "Initial SideStore-compatible beta release.",
+      "date": "2026-05-12",
+      "tintColor": "0A84FF"
+    }
+  ]
+}
