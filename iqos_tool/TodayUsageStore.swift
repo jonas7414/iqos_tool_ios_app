@@ -64,7 +64,7 @@ enum TodayUsageStore {
 
     private static func saveRecord(_ record: UsageRecord) {
         guard let fileURL else {
-            print("[IQOS AUTO REFRESH] Widget usage file write skipped: App Group container unavailable")
+            print("[IQOS AUTO REFRESH] Widget usage file write skipped: App Group container unavailable. Tried: \(candidateAppGroupIdentifiers)")
             return
         }
         do {
@@ -76,9 +76,23 @@ enum TodayUsageStore {
     }
 
     private static var fileURL: URL? {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
-            .appendingPathComponent(fileName, isDirectory: false)
+        for identifier in candidateAppGroupIdentifiers {
+            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) {
+                return containerURL.appendingPathComponent(fileName, isDirectory: false)
+            }
+        }
+        return nil
+    }
+
+    private static var candidateAppGroupIdentifiers: [String] {
+        var identifiers = [appGroupIdentifier]
+        if let bundleIdentifier = Bundle.main.bundleIdentifier {
+            identifiers.append("group.\(bundleIdentifier)")
+            if bundleIdentifier.hasSuffix(".widget") {
+                identifiers.append("group.\(String(bundleIdentifier.dropLast(".widget".count)))")
+            }
+        }
+        return Array(NSOrderedSet(array: identifiers)) as? [String] ?? identifiers
     }
 
     private static func dayIdentifier(for date: Date) -> String {

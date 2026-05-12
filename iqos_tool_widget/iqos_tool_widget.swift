@@ -31,9 +31,23 @@ private enum WidgetUsageStore {
     }
 
     private static var fileURL: URL? {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
-            .appendingPathComponent(fileName, isDirectory: false)
+        for identifier in candidateAppGroupIdentifiers {
+            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) {
+                return containerURL.appendingPathComponent(fileName, isDirectory: false)
+            }
+        }
+        return nil
+    }
+
+    private static var candidateAppGroupIdentifiers: [String] {
+        var identifiers = [appGroupIdentifier]
+        if let bundleIdentifier = Bundle.main.bundleIdentifier {
+            identifiers.append("group.\(bundleIdentifier)")
+            if bundleIdentifier.hasSuffix(".widget") {
+                identifiers.append("group.\(String(bundleIdentifier.dropLast(".widget".count)))")
+            }
+        }
+        return Array(NSOrderedSet(array: identifiers)) as? [String] ?? identifiers
     }
 
     private static func fileModificationDate(_ fileURL: URL) -> Date? {

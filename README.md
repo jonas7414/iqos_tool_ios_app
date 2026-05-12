@@ -52,7 +52,7 @@ https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/apps.json
 The current release points to:
 
 ```text
-https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0/iqos_tool-v1.0.0.ipa
+https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.1/iqos_tool-v1.0.1.ipa
 ```
 
 SideStore will download the unsigned IPA and sign it with your configured Apple ID.
@@ -85,7 +85,7 @@ Feature support depends on the connected device model and firmware. Some control
 
 | Version | Minimum iOS | Build SDK | Status |
 | ------- | ----------- | --------- | ------ |
-| v1.0.0  | iOS 26.4    | iOS 26.4  | Supported |
+| v1.0.1  | iOS 26.4    | iOS 26.4  | Supported |
 
 ## Requirements
 

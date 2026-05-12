@@ -52,7 +52,7 @@ https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/apps.json
 目前 release 版 IPA 指向：
 
 ```text
-https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0/iqos_tool-v1.0.0.ipa
+https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.1/iqos_tool-v1.0.1.ipa
 ```
 
 SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名後安裝。
@@ -85,7 +85,7 @@ SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名�
 
 | 版本   | 最低 iOS 版本 | Build SDK | 狀態 |
 | ------ | ------------- | --------- | ---- |
-| v1.0.0 | iOS 26.4      | iOS 26.4  | 支援 |
+| v1.0.1 | iOS 26.4      | iOS 26.4  | 支援 |
 
 ## 系統需求
 
