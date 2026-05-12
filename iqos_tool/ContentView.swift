@@ -81,7 +81,7 @@ struct ContentView: View {
                 .padding(16)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("IQOS Tool")
+            .navigationTitle("IQ Tool")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     SectionMenuButton(selectedSection: $selectedSection)

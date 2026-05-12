@@ -177,7 +177,7 @@ struct IQOSTodayUsageWidget: Widget {
         StaticConfiguration(kind: kind, provider: TodayUsageProvider()) { entry in
             TodayUsageWidgetView(entry: entry)
         }
-        .configurationDisplayName(Text("IQOS Today"))
+        .configurationDisplayName(Text("IQ Tool Today"))
         .description(Text("Shows today's IQOS usage from the latest app sync."))
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -190,7 +190,7 @@ struct IQOSDeviceControlWidget: Widget {
         StaticConfiguration(kind: kind, provider: TodayUsageProvider()) { entry in
             DeviceControlWidgetView(entry: entry)
         }
-        .configurationDisplayName(Text("IQOS Controls"))
+        .configurationDisplayName(Text("IQ Tool Controls"))
         .description(Text("Shows battery level and quick lock controls."))
         .supportedFamilies([.systemSmall, .systemMedium])
     }
