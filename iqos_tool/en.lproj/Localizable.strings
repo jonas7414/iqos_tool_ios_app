@@ -3,8 +3,10 @@
 "Access Unavailable" = "Access Unavailable";
 "Are you 20 years of age or older?" = "Are you 20 years of age or older?";
 "Are you currently located within the territory of the Republic of China?" = "Are you currently located within the territory of the Republic of China?";
+"Automatic" = "Automatic";
 "Automatically update today usage widget when iOS allows background Bluetooth" = "Automatically update today usage widget when iOS allows background Bluetooth";
 "Background Update" = "Background Update";
+"Background Style" = "Background Style";
 "Battery" = "Battery";
 "Battery Mode" = "Battery Mode";
 "Birth Year" = "Birth Year";
@@ -17,8 +19,11 @@
 "Collect logs for troubleshooting and export a debug ZIP" = "Collect logs for troubleshooting and export a debug ZIP";
 "Compliance Check" = "Compliance Check";
 "Continue" = "Continue";
+"Count" = "Count";
 "Controls" = "Controls";
 "Data updated" = "Data updated";
+"Dark" = "Dark";
+"Day" = "Day";
 "Days Used" = "Days Used";
 "Device locked" = "Device locked";
 "Device unlocked" = "Device unlocked";
@@ -33,8 +38,10 @@
 "FlexPuff" = "FlexPuff";
 "FlexPuff updated" = "FlexPuff updated";
 "High" = "High";
+"Home" = "Home";
 "IQ Tool" = "IQ Tool";
 "ILUMA i / i PRIME" = "ILUMA i / i PRIME";
+"Light" = "Light";
 "Lock" = "Lock";
 "Low" = "Low";
 "Menu" = "Menu";
@@ -62,8 +69,13 @@
 "Serial Number" = "Serial Number";
 "Signal" = "Signal";
 "Start automatically when inserted" = "Start automatically when inserted";
+"Sticks" = "sticks";
 "Tap search to start scanning" = "Tap search to start scanning";
 "This model is not supported" = "This model is not supported";
+"Today +%d compared with yesterday" = "Today +%d compared with yesterday";
+"Today %d compared with yesterday" = "Today %d compared with yesterday";
+"Today matches yesterday" = "Today matches yesterday";
+"Today Usage" = "Today Usage";
 "Today usage updated" = "Today usage updated";
 "Total Uses" = "Total Uses";
 "Unlock" = "Unlock";
@@ -107,5 +119,7 @@
 "Vibrate when usage starts" = "Vibrate when usage starts";
 "Vibration" = "Vibration";
 "Vibration updated" = "Vibration updated";
+"Weekly Usage Trend" = "Weekly Usage Trend";
 "Yes, exit" = "Yes, exit";
 "Yes, I am 20 or older" = "Yes, I am 20 or older";
+"Yesterday %d" = "Yesterday %d";

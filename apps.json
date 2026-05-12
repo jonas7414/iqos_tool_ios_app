@@ -15,11 +15,11 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0.2",
-          "buildVersion": "3",
-          "date": "2026-05-12",
-          "localizedDescription": "Improves SideStore widget communication by prioritizing the shared rewritten App Group and writing an app-open heartbeat.",
-          "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.2/iqos_tool-v1.0.2.ipa",
+          "version": "1.0.3",
+          "buildVersion": "4",
+          "date": "2026-05-13",
+          "localizedDescription": "Adds a localized home dashboard with today usage, weekly trend, and background style settings.",
+          "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.3/iqos_tool-v1.0.3.ipa",
           "size": 2259246,
           "minOSVersion": "26.4"
         }
@@ -50,10 +50,10 @@
   ],
   "news": [
     {
-      "title": "IQ Tool 1.0.2",
-      "identifier": "iq-tool-1.0.2",
-      "caption": "Fixes SideStore widget communication fallback order.",
-      "date": "2026-05-12",
+      "title": "IQ Tool 1.0.3",
+      "identifier": "iq-tool-1.0.3",
+      "caption": "Adds home usage charts and background style settings.",
+      "date": "2026-05-13",
       "tintColor": "0A84FF"
     }
   ]

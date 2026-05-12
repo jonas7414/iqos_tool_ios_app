@@ -6,6 +6,7 @@
 //
 
 import Combine
+import Charts
 import SwiftUI
 import UniformTypeIdentifiers
 #if canImport(UIKit)
@@ -13,11 +14,13 @@ import UIKit
 #endif
 
 private enum AppSection: String, CaseIterable {
+    case home
     case control
     case settings
 
     var title: LocalizedStringKey {
         switch self {
+        case .home: "Home"
         case .control: "Controls"
         case .settings: "Settings"
         }
@@ -25,8 +28,33 @@ private enum AppSection: String, CaseIterable {
 
     var icon: String {
         switch self {
+        case .home: "house"
         case .control: "slider.horizontal.3"
         case .settings: "gearshape"
+        }
+    }
+}
+
+enum BackgroundStyle: String, CaseIterable, Identifiable {
+    case automatic
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .automatic: "Automatic"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .automatic: nil
+        case .light: .light
+        case .dark: .dark
         }
     }
 }
@@ -41,28 +69,31 @@ private enum ComplianceStatus: String {
 struct ContentView: View {
     @StateObject private var viewModel = IQOSToolViewModel()
     @Environment(\.scenePhase) private var scenePhase
-    @State private var selectedSection: AppSection = .control
+    @State private var selectedSection: AppSection = .home
     @State private var complianceStatus = ComplianceGateStore.status
 
     var body: some View {
-        switch complianceStatus {
-        case .allowed:
-            mainContent
-        case .blockedRegion, .blockedAge:
-            ComplianceBlockedView(status: complianceStatus)
-        case .pending:
-            ComplianceGateView(
-                onBlockedRegion: {
-                    setComplianceStatus(.blockedRegion)
-                },
-                onBlockedAge: {
-                    setComplianceStatus(.blockedAge)
-                },
-                onAllowed: {
-                    setComplianceStatus(.allowed)
-                }
-            )
+        Group {
+            switch complianceStatus {
+            case .allowed:
+                mainContent
+            case .blockedRegion, .blockedAge:
+                ComplianceBlockedView(status: complianceStatus)
+            case .pending:
+                ComplianceGateView(
+                    onBlockedRegion: {
+                        setComplianceStatus(.blockedRegion)
+                    },
+                    onBlockedAge: {
+                        setComplianceStatus(.blockedAge)
+                    },
+                    onAllowed: {
+                        setComplianceStatus(.allowed)
+                    }
+                )
+            }
         }
+        .preferredColorScheme(viewModel.backgroundStyle.colorScheme)
     }
 
     private var mainContent: some View {
@@ -70,11 +101,15 @@ struct ContentView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     DeviceHeaderView(viewModel: viewModel)
-                    if selectedSection == .control {
+                    switch selectedSection {
+                    case .home:
+                        UsageSummaryPanelView(viewModel: viewModel)
+                        UsageHistoryChartPanelView(entries: viewModel.usageSnapshot.entries)
                         ScanPanelView(viewModel: viewModel)
-                        ControlPanelView(viewModel: viewModel)
                         DiagnosticsPanelView(viewModel: viewModel)
-                    } else {
+                    case .control:
+                        ControlPanelView(viewModel: viewModel)
+                    case .settings:
                         SettingsPanelView(viewModel: viewModel)
                     }
                 }
@@ -400,6 +435,104 @@ private struct DeviceHeaderView: View {
         }
         .padding(16)
         .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct UsageSummaryPanelView: View {
+    @ObservedObject var viewModel: IQOSToolViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Today Usage", systemImage: "flame.fill")
+                    .font(.headline)
+                Spacer()
+                comparisonBadge
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(viewModel.usageSnapshot.todayCount)")
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                Text("Sticks")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: comparisonIcon)
+                    .font(.subheadline.weight(.semibold))
+                Text(viewModel.usageComparisonText)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(String(format: String(localized: "Yesterday %d"), viewModel.usageSnapshot.yesterdayCount))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(comparisonColor)
+        }
+        .panelStyle()
+    }
+
+    private var comparisonBadge: some View {
+        Text(viewModel.usageDifferenceSignedText)
+            .font(.caption.weight(.bold))
+            .monospacedDigit()
+            .padding(.horizontal, 10)
+            .frame(minHeight: 28)
+            .foregroundStyle(comparisonColor)
+            .background(comparisonColor.opacity(0.14), in: Capsule())
+    }
+
+    private var comparisonColor: Color {
+        if viewModel.usageDifference > 0 { return .green }
+        if viewModel.usageDifference < 0 { return .red }
+        return .secondary
+    }
+
+    private var comparisonIcon: String {
+        if viewModel.usageDifference > 0 { return "arrow.up.right" }
+        if viewModel.usageDifference < 0 { return "arrow.down.right" }
+        return "minus"
+    }
+}
+
+private struct UsageHistoryChartPanelView: View {
+    let entries: [DailyUsageEntry]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Weekly Usage Trend", systemImage: "chart.xyaxis.line")
+                .font(.headline)
+
+            Chart(entries) { entry in
+                LineMark(
+                    x: .value(String(localized: "Day"), entry.date, unit: .day),
+                    y: .value(String(localized: "Count"), entry.count)
+                )
+                .foregroundStyle(.teal)
+                .interpolationMethod(.catmullRom)
+
+                PointMark(
+                    x: .value(String(localized: "Day"), entry.date, unit: .day),
+                    y: .value(String(localized: "Count"), entry.count)
+                )
+                .foregroundStyle(.teal)
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { _ in
+                    AxisGridLine()
+                    AxisTick()
+                    AxisValueLabel(format: .dateTime.weekday(.narrow))
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading)
+            }
+            .frame(height: 180)
+        }
+        .panelStyle()
     }
 }
 
@@ -864,6 +997,20 @@ private struct SettingsPanelView: View {
             .padding(14)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Background Style")
+                    .font(.subheadline.weight(.semibold))
+
+                Picker("Background Style", selection: $viewModel.backgroundStyle) {
+                    ForEach(BackgroundStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(isOn: $viewModel.debugModeEnabled) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -1105,6 +1252,124 @@ private extension Data {
     }
 }
 
+struct DailyUsageEntry: Identifiable, Codable {
+    let dayIdentifier: String
+    let date: Date
+    var count: Int
+
+    var id: String { dayIdentifier }
+}
+
+struct UsageSnapshot {
+    var todayCount: Int
+    var yesterdayCount: Int
+    var entries: [DailyUsageEntry]
+
+    static let empty = UsageSnapshot(
+        todayCount: 0,
+        yesterdayCount: 0,
+        entries: LocalUsageHistoryStore.weekEntries(from: [])
+    )
+}
+
+private enum LocalUsageHistoryStore {
+    private struct State: Codable {
+        var day: String?
+        var baseline: Int?
+        var lastTotal: Int?
+        var entries: [DailyUsageEntry]
+    }
+
+    private static let key = "usage.history.v1"
+
+    static func loadSnapshot(date: Date = Date()) -> UsageSnapshot {
+        snapshot(from: loadState(), date: date)
+    }
+
+    static func update(totalSmokingCount: UInt16, date: Date = Date()) -> UsageSnapshot {
+        var state = loadState()
+        let day = dayIdentifier(for: date)
+        let currentTotal = Int(totalSmokingCount)
+        var baseline = state.baseline ?? currentTotal
+
+        if state.day != day {
+            baseline = state.lastTotal ?? currentTotal
+            state.day = day
+            state.baseline = baseline
+        }
+
+        if currentTotal < baseline {
+            baseline = currentTotal
+            state.baseline = baseline
+        }
+
+        let todayCount = max(currentTotal - baseline, 0)
+        state.lastTotal = currentTotal
+        upsert(day: day, date: startOfDay(for: date), count: todayCount, in: &state.entries)
+        state.entries = prunedEntries(state.entries, date: date)
+        saveState(state)
+        return snapshot(from: state, date: date)
+    }
+
+    static func weekEntries(from entries: [DailyUsageEntry], date: Date = Date()) -> [DailyUsageEntry] {
+        let existing = Dictionary(uniqueKeysWithValues: entries.map { ($0.dayIdentifier, $0) })
+        return (0..<7).reversed().map { offset in
+            let dayDate = Calendar.current.date(byAdding: .day, value: -offset, to: startOfDay(for: date)) ?? date
+            let day = dayIdentifier(for: dayDate)
+            return existing[day] ?? DailyUsageEntry(dayIdentifier: day, date: dayDate, count: 0)
+        }
+    }
+
+    private static func snapshot(from state: State, date: Date) -> UsageSnapshot {
+        let today = dayIdentifier(for: date)
+        let yesterdayDate = Calendar.current.date(byAdding: .day, value: -1, to: startOfDay(for: date)) ?? date
+        let yesterday = dayIdentifier(for: yesterdayDate)
+        let entries = weekEntries(from: state.entries, date: date)
+        return UsageSnapshot(
+            todayCount: entries.first(where: { $0.dayIdentifier == today })?.count ?? 0,
+            yesterdayCount: entries.first(where: { $0.dayIdentifier == yesterday })?.count ?? 0,
+            entries: entries
+        )
+    }
+
+    private static func loadState() -> State {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let state = try? JSONDecoder().decode(State.self, from: data) else {
+            return State(day: nil, baseline: nil, lastTotal: nil, entries: [])
+        }
+        return state
+    }
+
+    private static func saveState(_ state: State) {
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+
+    private static func upsert(day: String, date: Date, count: Int, in entries: inout [DailyUsageEntry]) {
+        if let index = entries.firstIndex(where: { $0.dayIdentifier == day }) {
+            entries[index].count = count
+        } else {
+            entries.append(DailyUsageEntry(dayIdentifier: day, date: date, count: count))
+        }
+    }
+
+    private static func prunedEntries(_ entries: [DailyUsageEntry], date: Date) -> [DailyUsageEntry] {
+        let minimumDate = Calendar.current.date(byAdding: .day, value: -6, to: startOfDay(for: date)) ?? date
+        return entries
+            .filter { $0.date >= minimumDate }
+            .sorted { $0.date < $1.date }
+    }
+
+    private static func startOfDay(for date: Date) -> Date {
+        Calendar.current.startOfDay(for: date)
+    }
+
+    private static func dayIdentifier(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
+    }
+}
+
 @MainActor
 final class IQOSToolViewModel: ObservableObject {
     private enum WidgetDeviceAction {
@@ -1137,6 +1402,7 @@ final class IQOSToolViewModel: ObservableObject {
     @Published var connectingDeviceID: UUID?
     @Published var isShowingError = false
     @Published var errorMessage = ""
+    @Published var usageSnapshot = UsageSnapshot.empty
     @Published var debugModeEnabled = AppSettingsStore.debugModeEnabled {
         didSet {
             AppSettingsStore.debugModeEnabled = debugModeEnabled
@@ -1164,6 +1430,11 @@ final class IQOSToolViewModel: ObservableObject {
             }
         }
     }
+    @Published var backgroundStyle = AppSettingsStore.backgroundStyle {
+        didSet {
+            AppSettingsStore.backgroundStyle = backgroundStyle
+        }
+    }
 
     private let client = CoreBluetoothIQOSClient()
     private var device: IQOSDevice?
@@ -1180,6 +1451,7 @@ final class IQOSToolViewModel: ObservableObject {
 #endif
 
     init() {
+        usageSnapshot = LocalUsageHistoryStore.loadSnapshot()
         if backgroundUsageRefreshEnabled {
             startAutomaticUsageRefresh()
         }
@@ -1201,6 +1473,25 @@ final class IQOSToolViewModel: ObservableObject {
             return String(format: "%.2f V", diagnosticVoltage)
         }
         return "--"
+    }
+
+    var usageDifference: Int {
+        usageSnapshot.todayCount - usageSnapshot.yesterdayCount
+    }
+
+    var usageDifferenceSignedText: String {
+        if usageDifference > 0 { return "+\(usageDifference)" }
+        return String(usageDifference)
+    }
+
+    var usageComparisonText: String {
+        if usageDifference > 0 {
+            return String(format: String(localized: "Today +%d compared with yesterday"), usageDifference)
+        }
+        if usageDifference < 0 {
+            return String(format: String(localized: "Today %d compared with yesterday"), usageDifference)
+        }
+        return String(localized: "Today matches yesterday")
     }
 
     func supports(_ capability: IQOSDeviceCapability) -> Bool {
@@ -1578,6 +1869,7 @@ final class IQOSToolViewModel: ObservableObject {
             }
             return
         }
+        usageSnapshot = LocalUsageHistoryStore.update(totalSmokingCount: totalSmokingCount)
         if TodayUsageStore.update(totalSmokingCount: totalSmokingCount, batteryLevel: batteryLevel) {
             consoleLog("Widget usage updated with total=\(totalSmokingCount)")
             log("Widget usage updated with total=\(totalSmokingCount)")
@@ -1851,6 +2143,7 @@ private enum KnownIQOSDeviceStore {
 
 private enum AppSettingsStore {
     private static let backgroundUsageRefreshKey = "settings.backgroundUsageRefreshEnabled"
+    private static let backgroundStyleKey = "settings.backgroundStyle"
     private static let debugModeKey = "settings.debugModeEnabled"
 
     static var backgroundUsageRefreshEnabled: Bool {
@@ -1868,6 +2161,19 @@ private enum AppSettingsStore {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: debugModeKey)
+        }
+    }
+
+    static var backgroundStyle: BackgroundStyle {
+        get {
+            guard let rawValue = UserDefaults.standard.string(forKey: backgroundStyleKey),
+                  let style = BackgroundStyle(rawValue: rawValue) else {
+                return .automatic
+            }
+            return style
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: backgroundStyleKey)
         }
     }
 }
