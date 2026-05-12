@@ -20,7 +20,7 @@
           "date": "2026-05-12",
           "localizedDescription": "Initial release with Bluetooth controls, today usage widgets, background refresh, debug export, localization, and SideStore IPA packaging.",
           "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0/iqos_tool-v1.0.0.ipa",
-          "size": 2241523,
+          "size": 2250483,
           "minOSVersion": "26.4"
         }
       ],
