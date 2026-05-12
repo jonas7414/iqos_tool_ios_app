@@ -49,10 +49,10 @@ IQ Tool 是一款以 SwiftUI 開發的 iOS 工具 App，僅供教育與研究用
 https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/apps.json
 ```
 
-目前 beta 版 IPA 指向：
+目前 release 版 IPA 指向：
 
 ```text
-https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0.beta/iqos_tool-v1.0.0.beta.ipa
+https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0/iqos_tool-v1.0.0.ipa
 ```
 
 SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名後安裝。
@@ -81,12 +81,18 @@ SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名�
 | Smart Gesture      | 部分型號           |
 | 桌面小工具         | 需 iOS 支援 Widget |
 
+## 支援版本
+
+| 版本   | 最低 iOS 版本 | Build SDK | 狀態 |
+| ------ | ------------- | --------- | ---- |
+| v1.0.0 | iOS 26.4      | iOS 26.4  | 支援 |
+
 ## 系統需求
 
 - 已開啟藍牙的 iPhone
 - SideStore，或用於本機開發的 Xcode
 - 附近有支援的裝置
-- iOS 版本需符合專案 deployment target
+- iOS 26.4 或更新版本
 
 此 App 使用以下能力：
 

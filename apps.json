@@ -15,11 +15,11 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0",
+          "version": "1.0.0",
           "buildVersion": "1",
           "date": "2026-05-12",
-          "localizedDescription": "Initial beta release with Bluetooth controls, today usage widgets, background refresh, debug export, localization, and SideStore IPA packaging.",
-          "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0.beta/iqos_tool-v1.0.0.beta.ipa",
+          "localizedDescription": "Initial release with Bluetooth controls, today usage widgets, background refresh, debug export, localization, and SideStore IPA packaging.",
+          "downloadURL": "https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0/iqos_tool-v1.0.0.ipa",
           "size": 2241523,
           "minOSVersion": "26.4"
         }
@@ -50,9 +50,9 @@
   ],
   "news": [
     {
-      "title": "IQ Tool 1.0.0 beta",
-      "identifier": "iq-tool-1.0.0.beta",
-      "caption": "Initial SideStore-compatible beta release.",
+      "title": "IQ Tool 1.0.0",
+      "identifier": "iq-tool-1.0.0",
+      "caption": "Initial SideStore-compatible release.",
       "date": "2026-05-12",
       "tintColor": "0A84FF"
     }

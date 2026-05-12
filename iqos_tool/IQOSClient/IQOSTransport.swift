@@ -5,8 +5,14 @@ public protocol IQOSTransport: Sendable {
     var deviceInfo: IQOSDeviceInfo { get }
 
     func readBatteryLevel() async throws -> UInt8
-    func request(_ command: [UInt8]) async throws -> [UInt8]
+    func request(_ command: [UInt8], timeout: TimeInterval) async throws -> [UInt8]
     func send(_ command: [UInt8]) async throws
+}
+
+public extension IQOSTransport {
+    func request(_ command: [UInt8]) async throws -> [UInt8] {
+        try await request(command, timeout: 5)
+    }
 }
 
 public actor IQOSDevice {
@@ -140,7 +146,7 @@ public actor IQOSDevice {
     public func readDiagnosis() async throws -> IQOSDiagnosticData {
         var data = IQOSDiagnosticData()
         for command in IQOSProtocol.allDiagnosisCommands {
-            let response = try await transport.request(command)
+            let response = try await transport.request(command, timeout: 10)
             data = try IQOSProtocolParser.diagnosis(accumulating: data, from: response)
         }
         return data

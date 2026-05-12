@@ -49,10 +49,10 @@ Add this source URL in SideStore:
 https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/apps.json
 ```
 
-The current beta release points to:
+The current release points to:
 
 ```text
-https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0.beta/iqos_tool-v1.0.0.beta.ipa
+https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.0/iqos_tool-v1.0.0.ipa
 ```
 
 SideStore will download the unsigned IPA and sign it with your configured Apple ID.
@@ -81,12 +81,18 @@ Feature support depends on the connected device model and firmware. Some control
 | Smart Gesture                  | Selected models             |
 | Widgets                        | iOS widget support required |
 
+## Support Matrix
+
+| Version | Minimum iOS | Build SDK | Status |
+| ------- | ----------- | --------- | ------ |
+| v1.0.0  | iOS 26.4    | iOS 26.4  | Supported |
+
 ## Requirements
 
 - iPhone with Bluetooth enabled
 - SideStore for sideload installation, or Xcode for local development
 - A supported nearby device
-- iOS version compatible with the project deployment target
+- iOS 26.4 or later
 
 The app uses these capabilities:
 

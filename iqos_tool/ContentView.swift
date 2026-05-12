@@ -1168,6 +1168,9 @@ final class IQOSToolViewModel: ObservableObject {
     private var knownDeviceRefreshTask: Task<Void, Never>?
     private var automaticUsageRefreshTask: Task<Void, Never>?
     private var pendingWidgetAction: WidgetDeviceAction?
+    private var isUsageRefreshInProgress = false
+    private var lastUsageRefreshAttemptDate: Date?
+    private var lastUsageRefreshFailureDate: Date?
 #if canImport(UIKit)
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 #endif
@@ -1260,6 +1263,10 @@ final class IQOSToolViewModel: ObservableObject {
 
     func refreshConnectedDevice() {
         guard device != nil else { return }
+        guard !isUsageRefreshInProgress else {
+            log("Refresh connected device skipped: background usage refresh is running")
+            return
+        }
         log("Refresh connected device requested")
         Task {
             do {
@@ -1280,29 +1287,52 @@ final class IQOSToolViewModel: ObservableObject {
             consoleLog("Automatic usage refresh skipped: isConnecting=\(isConnecting), isBusy=\(isBusy)")
             return
         }
+        guard !isUsageRefreshInProgress else {
+            consoleLog("Automatic usage refresh skipped: refresh already in progress")
+            log("Known device background refresh skipped: refresh already in progress")
+            return
+        }
+        if let lastUsageRefreshFailureDate,
+           Date().timeIntervalSince(lastUsageRefreshFailureDate) < Self.usageRefreshFailureBackoff {
+            consoleLog("Automatic usage refresh skipped: recent failure backoff is active")
+            log("Known device background refresh skipped: recent failure backoff is active")
+            return
+        }
+        if let lastUsageRefreshAttemptDate,
+           Date().timeIntervalSince(lastUsageRefreshAttemptDate) < Self.automaticUsageRefreshInterval {
+            consoleLog("Automatic usage refresh skipped: refresh cooldown is active")
+            log("Known device background refresh skipped: refresh cooldown is active")
+            return
+        }
+        lastUsageRefreshAttemptDate = Date()
         consoleLog("Automatic usage refresh requested")
         log("Known device background refresh requested")
 
         if let device {
-            knownDeviceRefreshTask?.cancel()
+            isUsageRefreshInProgress = true
             knownDeviceRefreshTask = Task { [weak self] in
                 guard let self else { return }
                 beginBackgroundRefresh()
-                defer { endBackgroundRefresh() }
+                defer {
+                    isUsageRefreshInProgress = false
+                    endBackgroundRefresh()
+                }
 
                 do {
                     diagnostics = try await device.readDiagnosis()
                     batteryLevel = try? await device.readBatteryLevel()
                     updateTodayUsageWidget()
+                    lastUsageRefreshFailureDate = nil
                     consoleLog("Automatic usage refresh succeeded on connected device")
                     log("Known connected device usage refreshed")
                     statusText = String(localized: "Today usage updated")
                 } catch {
+                    lastUsageRefreshFailureDate = Date()
                     consoleLog("Automatic usage refresh failed on connected device: \(error)")
                     log("Known connected device refresh failed: \(error)")
-                    if connectedDevice == nil {
-                        statusText = String(localized: "Search for and connect to a nearby IQOS device")
-                    }
+                    statusText = connectedDevice == nil
+                        ? String(localized: "Search for and connect to a nearby IQOS device")
+                        : String(localized: "Background update failed")
                 }
             }
             return
@@ -1312,16 +1342,17 @@ final class IQOSToolViewModel: ObservableObject {
             consoleLog("Automatic usage refresh skipped: no known device saved")
             return
         }
+        isUsageRefreshInProgress = true
         consoleLog("Automatic usage refresh will reconnect known device: \(knownDevice.identifier.uuidString)")
         log("Loaded known device \(knownDevice.identifier.uuidString)")
 
-        knownDeviceRefreshTask?.cancel()
         knownDeviceRefreshTask = Task { [weak self] in
             guard let self else { return }
             beginBackgroundRefresh()
             isConnecting = true
             statusText = String(format: String(localized: "Connecting to %@"), knownDevice.localName ?? knownDevice.identifier.uuidString)
             defer {
+                isUsageRefreshInProgress = false
                 isConnecting = false
                 endBackgroundRefresh()
             }
@@ -1348,21 +1379,27 @@ final class IQOSToolViewModel: ObservableObject {
                 startRSSIMonitoring()
                 try await refreshAll()
                 performPendingWidgetActionIfNeeded()
+                lastUsageRefreshFailureDate = nil
                 consoleLog("Automatic usage refresh succeeded after reconnect")
                 log("Known device reconnected and usage refreshed")
                 statusText = String(localized: "Today usage updated")
             } catch {
+                lastUsageRefreshFailureDate = Date()
                 consoleLog("Automatic usage refresh failed after reconnect: \(error)")
                 log("Known device refresh failed: \(error)")
-                if connectedDevice == nil {
-                    statusText = String(localized: "Search for and connect to a nearby IQOS device")
-                }
+                statusText = connectedDevice == nil
+                    ? String(localized: "Search for and connect to a nearby IQOS device")
+                    : String(localized: "Background update failed")
             }
         }
     }
 
     func refreshDiagnostics() {
         guard let device else { return }
+        guard !isUsageRefreshInProgress else {
+            log("Diagnostics refresh skipped: background usage refresh is running")
+            return
+        }
         log("Diagnostics refresh requested")
         isBusy = true
         Task {
@@ -1562,7 +1599,7 @@ final class IQOSToolViewModel: ObservableObject {
         automaticUsageRefreshTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                try? await Task.sleep(nanoseconds: UInt64(Self.automaticUsageRefreshInterval * 1_000_000_000))
                 guard !Task.isCancelled else { break }
                 guard backgroundUsageRefreshEnabled else { continue }
                 consoleLog("Automatic usage refresh loop tick")
@@ -1578,6 +1615,7 @@ final class IQOSToolViewModel: ObservableObject {
         automaticUsageRefreshTask = nil
         knownDeviceRefreshTask?.cancel()
         knownDeviceRefreshTask = nil
+        isUsageRefreshInProgress = false
         endBackgroundRefresh()
     }
 
@@ -1616,6 +1654,10 @@ final class IQOSToolViewModel: ObservableObject {
     }
 
     private func runCommand(_ workingMessage: String, successMessage: String, operation: @escaping () async throws -> Void) {
+        guard !isUsageRefreshInProgress else {
+            log("Command skipped: background usage refresh is running")
+            return
+        }
         isBusy = true
         statusText = workingMessage
         log("Command started: \(workingMessage)")
@@ -1671,6 +1713,9 @@ final class IQOSToolViewModel: ObservableObject {
         lines.append("statusText: \(statusText)")
         lines.append("debugModeEnabled: \(debugModeEnabled)")
         lines.append("backgroundUsageRefreshEnabled: \(backgroundUsageRefreshEnabled)")
+        lines.append("isUsageRefreshInProgress: \(isUsageRefreshInProgress)")
+        lines.append("lastUsageRefreshAttemptAt: \(lastUsageRefreshAttemptDate.map(Self.debugDateFormatter.string(from:)) ?? "nil")")
+        lines.append("lastUsageRefreshFailureAt: \(lastUsageRefreshFailureDate.map(Self.debugDateFormatter.string(from:)) ?? "nil")")
         lines.append("isScanning: \(isScanning)")
         lines.append("isConnecting: \(isConnecting)")
         lines.append("isBusy: \(isBusy)")
@@ -1758,6 +1803,9 @@ final class IQOSToolViewModel: ObservableObject {
         backgroundTaskID = .invalid
 #endif
     }
+
+    private static let automaticUsageRefreshInterval: TimeInterval = 10 * 60
+    private static let usageRefreshFailureBackoff: TimeInterval = 3 * 60
 }
 
 private enum KnownIQOSDeviceStore {

@@ -23,7 +23,7 @@ private enum WidgetUsageStore {
         do {
             let data = try Data(contentsOf: fileURL)
             let record = try JSONDecoder().decode(UsageRecord.self, from: data)
-            let updatedAt = record.lastUpdated.map(Date.init(timeIntervalSince1970:))
+            let updatedAt = record.lastUpdated.map(Date.init(timeIntervalSince1970:)) ?? fileModificationDate(fileURL)
             return TodayUsageEntry(date: Date(), count: record.todayCount, batteryLevel: record.batteryLevel, updatedAt: updatedAt)
         } catch {
             return TodayUsageEntry(date: Date(), count: 0, batteryLevel: nil, updatedAt: nil)
@@ -34,6 +34,11 @@ private enum WidgetUsageStore {
         FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
             .appendingPathComponent(fileName, isDirectory: false)
+    }
+
+    private static func fileModificationDate(_ fileURL: URL) -> Date? {
+        try? FileManager.default
+            .attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date
     }
 }
 

@@ -8,6 +8,7 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
     private lazy var centralManager = CBCentralManager(delegate: self, queue: nil)
     private var scanContinuation: AsyncStream<IQOSDiscoveredDevice>.Continuation?
     private var connectContinuation: CheckedContinuation<CBPeripheral, Error>?
+    private var connectTimeoutTask: Task<Void, Never>?
     private var targetPeripheralID: UUID?
     private var peripherals: [UUID: CBPeripheral] = [:]
 
@@ -42,18 +43,7 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
             throw IQOSError.deviceNotFound
         }
 
-        let connected = try await withThrowingTaskGroup(of: CBPeripheral.self) { group in
-            group.addTask {
-                try await self.connectPeripheral(peripheral)
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                throw IQOSError.timeout
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
-        }
+        let connected = try await connectPeripheral(peripheral, timeout: timeout)
 
         let transport = try await CoreBluetoothIQOSTransport(peripheral: connected, advertisedName: discoveredDevice.name)
         Self.log("Transport ready: \(connected.identifier.uuidString)")
@@ -76,21 +66,7 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
 
         peripherals[identifier] = peripheral
 
-        let connected = try await withThrowingTaskGroup(of: CBPeripheral.self) { group in
-            group.addTask {
-                if peripheral.state == .connected {
-                    return peripheral
-                }
-                return try await self.connectPeripheral(peripheral)
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                throw IQOSError.timeout
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
-        }
+        let connected = peripheral.state == .connected ? peripheral : try await connectPeripheral(peripheral, timeout: timeout)
 
         let transport = try await CoreBluetoothIQOSTransport(peripheral: connected, advertisedName: localName)
         Self.log("Known device transport ready: \(connected.identifier.uuidString)")
@@ -107,12 +83,27 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
         }
     }
 
-    private func connectPeripheral(_ peripheral: CBPeripheral) async throws -> CBPeripheral {
-        try await withCheckedThrowingContinuation { continuation in
+    private func connectPeripheral(_ peripheral: CBPeripheral, timeout: TimeInterval) async throws -> CBPeripheral {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CBPeripheral, Error>) in
+            if connectContinuation != nil {
+                continuation.resume(throwing: IQOSError.transport("another connection is already in progress"))
+                return
+            }
+
             connectContinuation = continuation
             targetPeripheralID = peripheral.identifier
             Self.log("Central connect started: \(peripheral.identifier.uuidString), state=\(peripheral.state.rawValue)")
             centralManager.connect(peripheral)
+            connectTimeoutTask = Task { [weak self, weak peripheral] in
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                guard let self, let peripheral, self.targetPeripheralID == peripheral.identifier else { return }
+                Self.log("Central connect timed out: \(peripheral.identifier.uuidString)")
+                self.centralManager.cancelPeripheralConnection(peripheral)
+                self.connectContinuation?.resume(throwing: IQOSError.timeout)
+                self.connectContinuation = nil
+                self.targetPeripheralID = nil
+                self.connectTimeoutTask = nil
+            }
         }
     }
 
@@ -156,6 +147,8 @@ extension CoreBluetoothIQOSClient: CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         guard peripheral.identifier == targetPeripheralID else { return }
         Self.log("Central connected: \(peripheral.identifier.uuidString)")
+        connectTimeoutTask?.cancel()
+        connectTimeoutTask = nil
         connectContinuation?.resume(returning: peripheral)
         connectContinuation = nil
         targetPeripheralID = nil
@@ -164,6 +157,8 @@ extension CoreBluetoothIQOSClient: CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         guard peripheral.identifier == targetPeripheralID else { return }
         Self.log("Central failed to connect: \(peripheral.identifier.uuidString), error=\(String(describing: error))")
+        connectTimeoutTask?.cancel()
+        connectTimeoutTask = nil
         connectContinuation?.resume(throwing: error ?? IQOSError.transport("failed to connect"))
         connectContinuation = nil
         targetPeripheralID = nil
@@ -172,6 +167,8 @@ extension CoreBluetoothIQOSClient: CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         Self.log("Central disconnected: \(peripheral.identifier.uuidString), error=\(String(describing: error))")
         guard peripheral.identifier == targetPeripheralID else { return }
+        connectTimeoutTask?.cancel()
+        connectTimeoutTask = nil
         connectContinuation?.resume(throwing: error ?? IQOSError.transport("disconnected while connecting"))
         connectContinuation = nil
         targetPeripheralID = nil
@@ -188,6 +185,9 @@ public final class CoreBluetoothIQOSTransport: NSObject, IQOSTransport, @uncheck
     private var scpControlCharacteristic: CBCharacteristic?
     private var readContinuations: [CBUUID: CheckedContinuation<[UInt8], Error>] = [:]
     private var notificationContinuation: CheckedContinuation<[UInt8], Error>?
+    private var notificationTimeoutTask: Task<Void, Never>?
+    private var writeContinuation: CheckedContinuation<Void, Error>?
+    private var writeTimeoutTask: Task<Void, Never>?
     private var discoveryContinuation: CheckedContinuation<Void, Error>?
 
     public init(peripheral: CBPeripheral, advertisedName: String? = nil) async throws {
@@ -209,14 +209,28 @@ public final class CoreBluetoothIQOSTransport: NSObject, IQOSTransport, @uncheck
         return frame[2]
     }
 
-    public func request(_ command: [UInt8]) async throws -> [UInt8] {
+    public func request(_ command: [UInt8], timeout: TimeInterval = 5) async throws -> [UInt8] {
         return try await withCheckedThrowingContinuation { continuation in
+            if notificationContinuation != nil {
+                continuation.resume(throwing: IQOSError.transport("another request is already waiting for a response"))
+                return
+            }
+
             notificationContinuation = continuation
+            notificationTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                guard let self, self.notificationContinuation != nil else { return }
+                self.notificationContinuation?.resume(throwing: IQOSError.timeout)
+                self.notificationContinuation = nil
+                self.notificationTimeoutTask = nil
+            }
             Task {
                 do {
                     try await send(command)
                 } catch {
                     if self.notificationContinuation != nil {
+                        self.notificationTimeoutTask?.cancel()
+                        self.notificationTimeoutTask = nil
                         self.notificationContinuation = nil
                         continuation.resume(throwing: error)
                     }
@@ -229,7 +243,22 @@ public final class CoreBluetoothIQOSTransport: NSObject, IQOSTransport, @uncheck
         guard let characteristic = scpControlCharacteristic else {
             throw IQOSError.characteristicNotFound(IQOSProtocol.scpControlCharacteristicUUID)
         }
-        peripheral.writeValue(Data(command), for: characteristic, type: .withResponse)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            if writeContinuation != nil {
+                continuation.resume(throwing: IQOSError.transport("another write is already in progress"))
+                return
+            }
+
+            writeContinuation = continuation
+            writeTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard let self, self.writeContinuation != nil else { return }
+                self.writeContinuation?.resume(throwing: IQOSError.timeout)
+                self.writeContinuation = nil
+                self.writeTimeoutTask = nil
+            }
+            peripheral.writeValue(Data(command), for: characteristic, type: .withResponse)
+        }
     }
 
     private func discover() async throws {
@@ -306,6 +335,8 @@ extension CoreBluetoothIQOSTransport: CBPeripheralDelegate {
 
         if characteristic.uuid == CBUUID(string: IQOSProtocol.scpControlCharacteristicUUID),
            let continuation = notificationContinuation {
+            notificationTimeoutTask?.cancel()
+            notificationTimeoutTask = nil
             notificationContinuation = nil
             continuation.resume(returning: [UInt8](characteristic.value ?? Data()))
             return
@@ -325,6 +356,22 @@ extension CoreBluetoothIQOSTransport: CBPeripheralDelegate {
             deviceInfo.manufacturerName = value
         default:
             break
+        }
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard characteristic.uuid == CBUUID(string: IQOSProtocol.scpControlCharacteristicUUID),
+              let continuation = writeContinuation else {
+            return
+        }
+
+        writeTimeoutTask?.cancel()
+        writeTimeoutTask = nil
+        writeContinuation = nil
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
         }
     }
 }

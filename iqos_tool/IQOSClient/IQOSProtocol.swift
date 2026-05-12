@@ -223,8 +223,16 @@ enum IQOSProtocolParser {
             guard UInt16(littleEndianBytes: bytes[4], bytes[5]) == 0x0101 else {
                 throw IQOSError.protocolDecode("invalid telemetry frame: wrong marker")
             }
-            let blockCount = max(Int(bytes[3]).subtractingReportingOverflow(2).partialValue, 0) / 8
-            let required = 6 + blockCount * 8
+            let payloadLength = Int(bytes[3])
+            guard payloadLength >= 2 else {
+                throw IQOSError.protocolDecode("invalid telemetry frame: payload length too short")
+            }
+            let blockPayloadLength = payloadLength - 2
+            guard blockPayloadLength.isMultiple(of: 8) else {
+                throw IQOSError.protocolDecode("invalid telemetry frame: telemetry block payload is misaligned")
+            }
+            let blockCount = blockPayloadLength / 8
+            let required = 4 + payloadLength
             guard bytes.count >= required else {
                 throw IQOSError.protocolDecode("invalid telemetry frame: expected \(required) bytes, got \(bytes.count)")
             }

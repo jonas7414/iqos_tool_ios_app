@@ -63,7 +63,10 @@ enum TodayUsageStore {
     }
 
     private static func saveRecord(_ record: UsageRecord) {
-        guard let fileURL else { return }
+        guard let fileURL else {
+            print("[IQOS AUTO REFRESH] Widget usage file write skipped: App Group container unavailable")
+            return
+        }
         do {
             let data = try JSONEncoder().encode(record)
             try data.write(to: fileURL, options: [.atomic])

@@ -94,6 +94,22 @@ final class IQOSProtocolTests: XCTestCase {
         XCTAssertEqual(data.batteryVoltage, 4.072)
     }
 
+    func testAccumulatesTelemetryDiagnosisFrame() throws {
+        let data = try IQOSProtocolParser.diagnosis(
+            accumulating: IQOSDiagnosticData(),
+            from: [
+                0x00, 0x08, 0x90, 0x22, 0x01, 0x01,
+                0x00, 0x00, 0x00, 0x00, 0x7B, 0x00, 0x00, 0x8E,
+                0x00, 0x00, 0x00, 0x00, 0x2D, 0x00, 0x00, 0x17,
+                0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x99,
+                0x00, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x98
+            ]
+        )
+
+        XCTAssertEqual(data.totalSmokingCount, 123)
+        XCTAssertEqual(data.daysUsed, 45)
+    }
+
     func testModelDetectionOrder() {
         XCTAssertEqual(IQOSDeviceModel(localName: "IQOS ILUMA i PRIME"), .ilumaIPrime)
         XCTAssertEqual(IQOSDeviceModel(localName: "IQOS ILUMA i ONE"), .ilumaIOne)
