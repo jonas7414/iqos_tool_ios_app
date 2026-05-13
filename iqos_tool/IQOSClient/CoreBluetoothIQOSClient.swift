@@ -7,6 +7,8 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
 
     private lazy var centralManager = CBCentralManager(delegate: self, queue: nil)
     private var scanContinuation: AsyncStream<IQOSDiscoveredDevice>.Continuation?
+    private var scanSessionID: UUID?
+    private var scanTimeoutTask: Task<Void, Never>?
     private var connectContinuation: CheckedContinuation<CBPeripheral, Error>?
     private var connectTimeoutTask: Task<Void, Never>?
     private var targetPeripheralID: UUID?
@@ -18,20 +20,54 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
 
     public func scan(timeout: TimeInterval = 8) -> AsyncStream<IQOSDiscoveredDevice> {
         AsyncStream { continuation in
+            self.stopScan()
+
+            let sessionID = UUID()
+            self.scanSessionID = sessionID
             self.scanContinuation = continuation
-            Task {
-                try? await self.waitUntilPoweredOn()
+
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.finishScan(sessionID: sessionID, reason: "terminated")
+                }
+            }
+
+            self.scanTimeoutTask = Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.waitUntilPoweredOn()
+                } catch {
+                    Self.log("Scan skipped: \(error)")
+                    self.finishScan(sessionID: sessionID, reason: "unavailable")
+                    return
+                }
+
+                guard self.scanSessionID == sessionID else { return }
                 Self.log("Scan started")
                 self.centralManager.scanForPeripherals(
                     withServices: [CBUUID(string: IQOSProtocol.coreServiceUUID)],
                     options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
                 )
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                self.centralManager.stopScan()
-                Self.log("Scan stopped")
-                continuation.finish()
+                guard !Task.isCancelled else { return }
+                self.finishScan(sessionID: sessionID, reason: "timeout")
             }
         }
+    }
+
+    public func stopScan() {
+        finishScan(sessionID: scanSessionID, reason: "caller")
+    }
+
+    private func finishScan(sessionID: UUID?, reason: String) {
+        guard let activeSessionID = scanSessionID, activeSessionID == sessionID else { return }
+        scanTimeoutTask?.cancel()
+        scanTimeoutTask = nil
+        centralManager.stopScan()
+        scanContinuation?.finish()
+        scanContinuation = nil
+        scanSessionID = nil
+        Self.log("Scan stopped (\(reason))")
     }
 
     public func connect(to discoveredDevice: IQOSDiscoveredDevice, timeout: TimeInterval = 12) async throws -> IQOSDevice {
@@ -55,9 +91,16 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
         Self.log("Known device connect requested: \(identifier.uuidString)")
 
         let serviceUUID = CBUUID(string: IQOSProtocol.coreServiceUUID)
-        let peripheral = peripherals[identifier]
+        var effectiveLocalName = localName
+        var peripheral = peripherals[identifier]
             ?? centralManager.retrievePeripherals(withIdentifiers: [identifier]).first
             ?? centralManager.retrieveConnectedPeripherals(withServices: [serviceUUID]).first(where: { $0.identifier == identifier })
+
+        if peripheral == nil,
+           let discovered = await scanForKnownDevice(identifier: identifier, localName: localName, timeout: min(timeout, 5)) {
+            effectiveLocalName = discovered.name ?? localName
+            peripheral = peripherals[discovered.id]
+        }
 
         guard let peripheral else {
             Self.log("Known device connect failed: peripheral not found")
@@ -68,9 +111,32 @@ public final class CoreBluetoothIQOSClient: NSObject, @unchecked Sendable {
 
         let connected = peripheral.state == .connected ? peripheral : try await connectPeripheral(peripheral, timeout: timeout)
 
-        let transport = try await CoreBluetoothIQOSTransport(peripheral: connected, advertisedName: localName)
+        let transport = try await CoreBluetoothIQOSTransport(peripheral: connected, advertisedName: effectiveLocalName)
         Self.log("Known device transport ready: \(connected.identifier.uuidString)")
-        return IQOSDevice(transport: transport, identifier: connected.identifier, localName: connected.name ?? localName)
+        return IQOSDevice(transport: transport, identifier: connected.identifier, localName: connected.name ?? effectiveLocalName)
+    }
+
+    private func scanForKnownDevice(identifier: UUID, localName: String?, timeout: TimeInterval) async -> IQOSDiscoveredDevice? {
+        Self.log("Known device scan fallback started: \(identifier.uuidString)")
+        for await discovered in scan(timeout: timeout) {
+            if discovered.id == identifier {
+                Self.log("Known device found by identifier during scan fallback")
+                stopScan()
+                return discovered
+            }
+
+            guard let localName else { continue }
+            let discoveredName = discovered.name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let savedName = localName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !savedName.isEmpty, discoveredName == savedName {
+                Self.log("Known device found by local name during scan fallback")
+                stopScan()
+                return discovered
+            }
+        }
+
+        Self.log("Known device scan fallback finished without match")
+        return nil
     }
 
     private func waitUntilPoweredOn() async throws {

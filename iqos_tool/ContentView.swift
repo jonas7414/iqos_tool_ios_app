@@ -15,12 +15,14 @@ import UIKit
 
 private enum AppSection: String, CaseIterable {
     case home
+    case history
     case control
     case settings
 
     var title: LocalizedStringKey {
         switch self {
         case .home: "Home"
+        case .history: "History"
         case .control: "Controls"
         case .settings: "Settings"
         }
@@ -29,6 +31,7 @@ private enum AppSection: String, CaseIterable {
     var icon: String {
         switch self {
         case .home: "house"
+        case .history: "calendar"
         case .control: "slider.horizontal.3"
         case .settings: "gearshape"
         }
@@ -107,6 +110,8 @@ struct ContentView: View {
                         UsageHistoryChartPanelView(entries: viewModel.usageSnapshot.entries)
                         ScanPanelView(viewModel: viewModel)
                         DiagnosticsPanelView(viewModel: viewModel)
+                    case .history:
+                        UsageHistoryCalendarPanelView(entries: viewModel.usageSnapshot.historyEntries)
                     case .control:
                         ControlPanelView(viewModel: viewModel)
                     case .settings:
@@ -139,13 +144,13 @@ struct ContentView: View {
         }
         .onAppear {
             viewModel.touchWidgetCommunication()
-            viewModel.refreshKnownDeviceUsageIfPossible()
+            viewModel.refreshForegroundDeviceState()
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
                 viewModel.touchWidgetCommunication()
-                viewModel.refreshKnownDeviceUsageIfPossible()
+                viewModel.refreshForegroundDeviceState()
             case .background:
                 viewModel.refreshKnownDeviceUsageIfPossible()
             case .inactive:
@@ -533,6 +538,345 @@ private struct UsageHistoryChartPanelView: View {
             .frame(height: 180)
         }
         .panelStyle()
+    }
+}
+
+private struct UsageHistoryCalendarPanelView: View {
+    let entries: [DailyUsageEntry]
+    @State private var displayedMonth = Calendar.current.startOfMonth(for: Date())
+    @State private var selectedDayIdentifier: String?
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Usage History", systemImage: "calendar")
+                    .font(.headline)
+                Spacer()
+                monthControls
+            }
+
+            bestRecordCard
+            historySummary
+
+            VStack(spacing: 8) {
+                weekdayHeader
+                LazyVGrid(columns: columns, spacing: 6) {
+                    ForEach(calendarDays) { day in
+                        HistoryCalendarDayCell(
+                            day: day,
+                            entry: day.dayIdentifier.flatMap { entriesByDay[$0] },
+                            isSelected: day.dayIdentifier == selectedDayIdentifier
+                        ) {
+                            guard day.isInDisplayedMonth, let dayIdentifier = day.dayIdentifier else { return }
+                            selectedDayIdentifier = dayIdentifier
+                        }
+                    }
+                }
+            }
+
+            selectedDaySummary
+        }
+        .panelStyle()
+        .onAppear {
+            if selectedDayIdentifier == nil {
+                selectedDayIdentifier = entries.last(where: { Calendar.current.isDate($0.date, equalTo: displayedMonth, toGranularity: .month) })?.dayIdentifier
+            }
+        }
+    }
+
+    private var monthControls: some View {
+        HStack(spacing: 6) {
+            Button {
+                moveMonth(by: -1)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Previous Month"))
+
+            Text(Self.monthFormatter.string(from: displayedMonth))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .frame(minWidth: 104)
+
+            Button {
+                moveMonth(by: 1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Next Month"))
+            .disabled(!canMoveToNextMonth)
+        }
+    }
+
+    private var bestRecordCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "crown.fill")
+                .font(.title3)
+                .foregroundStyle(.yellow)
+                .frame(width: 34, height: 34)
+                .background(Color.yellow.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Best Record")
+                    .font(.subheadline.weight(.semibold))
+                Text(bestRecordText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var historySummary: some View {
+        HStack(spacing: 10) {
+            HistorySummaryTile(title: "Month Total", value: String(format: String(localized: "%d sticks"), monthTotal), icon: "sum")
+            HistorySummaryTile(title: "Active Days", value: String(format: String(localized: "%d days"), activeDayCount), icon: "calendar.badge.checkmark")
+            HistorySummaryTile(title: "Daily Average", value: averageText, icon: "chart.bar")
+        }
+    }
+
+    private var weekdayHeader: some View {
+        LazyVGrid(columns: columns, spacing: 6) {
+            ForEach(Self.weekdaySymbols, id: \.self) { weekday in
+                Text(weekday)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var selectedDaySummary: some View {
+        if let selectedDayIdentifier,
+           let selectedDay = calendarDays.first(where: { $0.dayIdentifier == selectedDayIdentifier }),
+           let date = selectedDay.date {
+            let count = entriesByDay[selectedDayIdentifier]?.count ?? 0
+            HStack(spacing: 12) {
+                Image(systemName: count > 0 ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(count > 0 ? .teal : .secondary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(String(format: String(localized: "Usage on %@"), Self.dayFormatter.string(from: date)))
+                        .font(.subheadline.weight(.semibold))
+                    Text(count > 0
+                         ? String(format: String(localized: "%d sticks recorded"), count)
+                         : String(localized: "No usage recorded for this day"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(12)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            HStack(spacing: 12) {
+                Image(systemName: "info.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                Text("Tap a day with a cigarette mark to see the count.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(12)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private var entriesByDay: [String: DailyUsageEntry] {
+        Dictionary(uniqueKeysWithValues: entries.map { ($0.dayIdentifier, $0) })
+    }
+
+    private var monthEntries: [DailyUsageEntry] {
+        entries.filter { Calendar.current.isDate($0.date, equalTo: displayedMonth, toGranularity: .month) }
+    }
+
+    private var monthTotal: Int {
+        monthEntries.reduce(0) { $0 + $1.count }
+    }
+
+    private var activeDayCount: Int {
+        monthEntries.filter { $0.count > 0 }.count
+    }
+
+    private var averageText: String {
+        guard activeDayCount > 0 else { return String(format: String(localized: "%d sticks"), 0) }
+        let average = Double(monthTotal) / Double(activeDayCount)
+        return String(format: String(localized: "%.1f sticks"), average)
+    }
+
+    private var bestRecordText: String {
+        guard let bestEntry else {
+            return String(localized: "No records yet")
+        }
+        return String(
+            format: String(localized: "%@ · %d sticks"),
+            Self.dayFormatter.string(from: bestEntry.date),
+            bestEntry.count
+        )
+    }
+
+    private var bestEntry: DailyUsageEntry? {
+        entries
+            .filter { $0.count > 0 }
+            .max {
+                if $0.count == $1.count {
+                    return $0.date < $1.date
+                }
+                return $0.count < $1.count
+            }
+    }
+
+    private var calendarDays: [HistoryCalendarDay] {
+        let calendar = Calendar.current
+        let startOfMonth = calendar.startOfMonth(for: displayedMonth)
+        guard let range = calendar.range(of: .day, in: .month, for: startOfMonth),
+              let firstWeekday = calendar.dateComponents([.weekday], from: startOfMonth).weekday else {
+            return []
+        }
+
+        let leadingBlankCount = (firstWeekday - calendar.firstWeekday + 7) % 7
+        var days = (0..<leadingBlankCount).map { _ in HistoryCalendarDay(date: nil, isInDisplayedMonth: false) }
+        days += range.compactMap { day -> HistoryCalendarDay? in
+            guard let date = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth) else { return nil }
+            return HistoryCalendarDay(date: date, isInDisplayedMonth: true)
+        }
+
+        let trailingBlankCount = (7 - days.count % 7) % 7
+        days += (0..<trailingBlankCount).map { _ in HistoryCalendarDay(date: nil, isInDisplayedMonth: false) }
+        return days
+    }
+
+    private var canMoveToNextMonth: Bool {
+        let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
+        return nextMonth <= Calendar.current.startOfMonth(for: Date())
+    }
+
+    private func moveMonth(by value: Int) {
+        guard let nextMonth = Calendar.current.date(byAdding: .month, value: value, to: displayedMonth) else { return }
+        displayedMonth = min(nextMonth, Calendar.current.startOfMonth(for: Date()))
+        selectedDayIdentifier = entries.last(where: { Calendar.current.isDate($0.date, equalTo: displayedMonth, toGranularity: .month) })?.dayIdentifier
+    }
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = DateFormatter.dateFormat(fromTemplate: "yMMMM", options: 0, locale: .current)
+        return formatter
+    }()
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    private static var weekdaySymbols: [String] {
+        let formatter = DateFormatter()
+        let symbols = formatter.shortStandaloneWeekdaySymbols ?? []
+        let firstWeekdayIndex = Calendar.current.firstWeekday - 1
+        return Array(symbols[firstWeekdayIndex...]) + Array(symbols[..<firstWeekdayIndex])
+    }
+}
+
+private struct HistoryCalendarDay: Identifiable {
+    let date: Date?
+    let isInDisplayedMonth: Bool
+    let id = UUID()
+
+    var dayIdentifier: String? {
+        date.map { Calendar.current.dayIdentifier(for: $0) }
+    }
+
+    var dayNumberText: String {
+        guard let date else { return "" }
+        return String(Calendar.current.component(.day, from: date))
+    }
+}
+
+private struct HistoryCalendarDayCell: View {
+    let day: HistoryCalendarDay
+    let entry: DailyUsageEntry?
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Text(day.dayNumberText)
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(day.isInDisplayedMonth ? Color.primary : Color.clear)
+                Text(hasUsage ? "🚬" : "")
+                    .font(.caption)
+                    .frame(height: 14)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .background(backgroundStyle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isSelected ? Color.teal : Color.clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!day.isInDisplayedMonth)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var hasUsage: Bool {
+        (entry?.count ?? 0) > 0
+    }
+
+    private var backgroundStyle: Color {
+        if !day.isInDisplayedMonth { return .clear }
+        return hasUsage ? Color.teal.opacity(0.14) : Color(.secondarySystemGroupedBackground)
+    }
+
+    private var accessibilityText: Text {
+        guard let date = day.date else { return Text("") }
+        let dateText = DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none)
+        if let entry, entry.count > 0 {
+            return Text(String(format: String(localized: "%@, %d sticks"), dateText, entry.count))
+        }
+        return Text(String(format: String(localized: "%@, no usage"), dateText))
+    }
+}
+
+private struct HistorySummaryTile: View {
+    let title: LocalizedStringKey
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.teal)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -998,6 +1342,56 @@ private struct SettingsPanelView: View {
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Data Refresh Interval")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Set how often IQ Tool reads battery, usage count, diagnostics, and status data.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(String(format: String(localized: "Every %d seconds"), viewModel.dataRefreshIntervalSeconds))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Stepper(
+                    String(format: String(localized: "Every %d seconds"), viewModel.dataRefreshIntervalSeconds),
+                    value: $viewModel.dataRefreshIntervalSeconds,
+                    in: IQOSToolViewModel.minimumDataRefreshIntervalSeconds...IQOSToolViewModel.maximumDataRefreshIntervalSeconds,
+                    step: IQOSToolViewModel.dataRefreshIntervalStepSeconds
+                )
+                .labelsHidden()
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Toggle(isOn: $viewModel.autoSearchEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Auto Search")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Automatically search for nearby devices when the app opens. If a known device is found, IQ Tool connects and refreshes its data. This may increase battery usage.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Toggle(isOn: $viewModel.backgroundScanEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Background Scan")
+                        .font(.subheadline.weight(.semibold))
+                    Text("After connecting, periodically scan briefly to update signal strength. This is optional and may increase battery usage.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Background Style")
                     .font(.subheadline.weight(.semibold))
 
@@ -1103,6 +1497,14 @@ private struct DebugLogPanelView: View {
                 Label("Debug Log", systemImage: "ladybug")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
+                Button {
+                    viewModel.copyDebugLogToPasteboard()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .disabled(viewModel.debugLogs.isEmpty)
+                .accessibilityLabel(Text("Copy Debug Log"))
+
                 Button {
                     viewModel.clearDebugLogs()
                 } label: {
@@ -1264,11 +1666,13 @@ struct UsageSnapshot {
     var todayCount: Int
     var yesterdayCount: Int
     var entries: [DailyUsageEntry]
+    var historyEntries: [DailyUsageEntry]
 
     static let empty = UsageSnapshot(
         todayCount: 0,
         yesterdayCount: 0,
-        entries: LocalUsageHistoryStore.weekEntries(from: [])
+        entries: LocalUsageHistoryStore.weekEntries(from: []),
+        historyEntries: []
     )
 }
 
@@ -1281,6 +1685,7 @@ private enum LocalUsageHistoryStore {
     }
 
     private static let key = "usage.history.v1"
+    private static let historyRetentionDays = 365
 
     static func loadSnapshot(date: Date = Date()) -> UsageSnapshot {
         snapshot(from: loadState(), date: date)
@@ -1328,7 +1733,8 @@ private enum LocalUsageHistoryStore {
         return UsageSnapshot(
             todayCount: entries.first(where: { $0.dayIdentifier == today })?.count ?? 0,
             yesterdayCount: entries.first(where: { $0.dayIdentifier == yesterday })?.count ?? 0,
-            entries: entries
+            entries: entries,
+            historyEntries: state.entries
         )
     }
 
@@ -1354,7 +1760,7 @@ private enum LocalUsageHistoryStore {
     }
 
     private static func prunedEntries(_ entries: [DailyUsageEntry], date: Date) -> [DailyUsageEntry] {
-        let minimumDate = Calendar.current.date(byAdding: .day, value: -6, to: startOfDay(for: date)) ?? date
+        let minimumDate = Calendar.current.date(byAdding: .day, value: -historyRetentionDays, to: startOfDay(for: date)) ?? date
         return entries
             .filter { $0.date >= minimumDate }
             .sorted { $0.date < $1.date }
@@ -1414,6 +1820,27 @@ final class IQOSToolViewModel: ObservableObject {
         }
     }
     @Published var debugLogs: [String] = []
+    @Published var autoSearchEnabled = AppSettingsStore.autoSearchEnabled {
+        didSet {
+            AppSettingsStore.autoSearchEnabled = autoSearchEnabled
+            log("Auto search \(autoSearchEnabled ? "enabled" : "disabled")")
+            if autoSearchEnabled {
+                startAutoSearchIfNeeded()
+            }
+        }
+    }
+    @Published var backgroundScanEnabled = AppSettingsStore.backgroundScanEnabled {
+        didSet {
+            AppSettingsStore.backgroundScanEnabled = backgroundScanEnabled
+            log("Background scan \(backgroundScanEnabled ? "enabled" : "disabled")")
+            if backgroundScanEnabled {
+                startRSSIMonitoring()
+            } else {
+                rssiMonitorTask?.cancel()
+                rssiMonitorTask = nil
+            }
+        }
+    }
     @Published var backgroundUsageRefreshEnabled = AppSettingsStore.backgroundUsageRefreshEnabled {
         didSet {
             AppSettingsStore.backgroundUsageRefreshEnabled = backgroundUsageRefreshEnabled
@@ -1430,6 +1857,16 @@ final class IQOSToolViewModel: ObservableObject {
             }
         }
     }
+    @Published var dataRefreshIntervalSeconds = AppSettingsStore.dataRefreshIntervalSeconds {
+        didSet {
+            let clampedIntervalSeconds = Self.clampedDataRefreshInterval(dataRefreshIntervalSeconds)
+            AppSettingsStore.dataRefreshIntervalSeconds = clampedIntervalSeconds
+            log("Data refresh interval changed: \(clampedIntervalSeconds) seconds")
+            if backgroundUsageRefreshEnabled {
+                restartAutomaticUsageRefresh()
+            }
+        }
+    }
     @Published var backgroundStyle = AppSettingsStore.backgroundStyle {
         didSet {
             AppSettingsStore.backgroundStyle = backgroundStyle
@@ -1440,6 +1877,7 @@ final class IQOSToolViewModel: ObservableObject {
     private var device: IQOSDevice?
     private var scanTask: Task<Void, Never>?
     private var rssiMonitorTask: Task<Void, Never>?
+    private var foregroundRefreshTask: Task<Void, Never>?
     private var knownDeviceRefreshTask: Task<Void, Never>?
     private var automaticUsageRefreshTask: Task<Void, Never>?
     private var pendingWidgetAction: WidgetDeviceAction?
@@ -1451,6 +1889,8 @@ final class IQOSToolViewModel: ObservableObject {
 #endif
 
     init() {
+        dataRefreshIntervalSeconds = Self.clampedDataRefreshInterval(dataRefreshIntervalSeconds)
+        AppSettingsStore.dataRefreshIntervalSeconds = dataRefreshIntervalSeconds
         usageSnapshot = LocalUsageHistoryStore.loadSnapshot()
         if backgroundUsageRefreshEnabled {
             startAutomaticUsageRefresh()
@@ -1498,7 +1938,57 @@ final class IQOSToolViewModel: ObservableObject {
         connectedDevice?.model.supports(capability) ?? false
     }
 
+    func startAutoSearchIfNeeded() {
+        guard autoSearchEnabled else { return }
+        guard connectedDevice == nil, !isScanning, !isConnecting, !isBusy, !isUsageRefreshInProgress else { return }
+        log("Auto search requested")
+        startScan()
+    }
+
+    func refreshForegroundDeviceState() {
+        guard foregroundRefreshTask == nil else {
+            log("Foreground refresh skipped: already running")
+            return
+        }
+        guard !isScanning, !isConnecting, !isBusy, !isUsageRefreshInProgress else {
+            log("Foreground refresh skipped: isScanning=\(isScanning), isConnecting=\(isConnecting), isBusy=\(isBusy), isUsageRefreshInProgress=\(isUsageRefreshInProgress)")
+            return
+        }
+
+        foregroundRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            defer { foregroundRefreshTask = nil }
+
+            if device != nil {
+                log("Foreground full refresh requested")
+                do {
+                    try await refreshAll()
+                    return
+                } catch {
+                    log("Foreground full refresh failed: \(error)")
+                    markKnownDeviceDisconnected()
+                }
+            }
+
+            guard let knownDevice = KnownIQOSDeviceStore.load() else {
+                log("Foreground known device reconnect skipped: no known device saved")
+                return
+            }
+
+            log("Foreground known device reconnect requested")
+            do {
+                try await reconnectKnownDeviceAndRefresh(knownDevice)
+                lastUsageRefreshFailureDate = nil
+            } catch {
+                lastUsageRefreshFailureDate = Date()
+                log("Foreground known device reconnect failed: \(error)")
+                statusText = String(localized: "Search for and connect to a nearby IQOS device")
+            }
+        }
+    }
+
     func startScan() {
+        guard !isScanning, !isConnecting else { return }
         log("Scan requested")
         rssiMonitorTask?.cancel()
         scanTask?.cancel()
@@ -1508,18 +1998,29 @@ final class IQOSToolViewModel: ObservableObject {
 
         scanTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                isScanning = false
+                if connectedDevice == nil {
+                    if !isConnecting {
+                        statusText = discoveredDevices.isEmpty ? String(localized: "No IQOS devices found") : String(localized: "Select a device to connect")
+                    }
+                } else {
+                    startRSSIMonitoring()
+                }
+            }
+
             for await discovered in client.scan(timeout: 8) {
                 guard !Task.isCancelled else { break }
                 log("Discovered \(discovered.displayName), RSSI \(discovered.rssiText)")
                 upsert(discovered)
+                if shouldAutoConnect(to: discovered) {
+                    log("Known device discovered; auto-connect started")
+                    client.stopScan()
+                    connect(to: discovered)
+                    break
+                }
             }
             log("Scan finished with \(discoveredDevices.count) device(s)")
-            isScanning = false
-            if connectedDevice == nil {
-                statusText = discoveredDevices.isEmpty ? String(localized: "No IQOS devices found") : String(localized: "Select a device to connect")
-            } else {
-                startRSSIMonitoring()
-            }
         }
     }
 
@@ -1537,8 +2038,8 @@ final class IQOSToolViewModel: ObservableObject {
                 device = connected
                 connectedDevice = summary
                 connectedRSSI = discoveredDevice.rssi
+                KnownIQOSDeviceStore.save(summary)
                 if backgroundUsageRefreshEnabled {
-                    KnownIQOSDeviceStore.save(summary)
                     startAutomaticUsageRefresh()
                 }
                 log("Connected to \(summary.displayName), model \(summary.model.displayName)")
@@ -1578,8 +2079,8 @@ final class IQOSToolViewModel: ObservableObject {
             consoleLog("Automatic usage refresh skipped: background update is disabled")
             return
         }
-        guard !isConnecting, !isBusy else {
-            consoleLog("Automatic usage refresh skipped: isConnecting=\(isConnecting), isBusy=\(isBusy)")
+        guard !isScanning, !isConnecting, !isBusy else {
+            consoleLog("Automatic usage refresh skipped: isScanning=\(isScanning), isConnecting=\(isConnecting), isBusy=\(isBusy)")
             return
         }
         guard !isUsageRefreshInProgress else {
@@ -1594,7 +2095,7 @@ final class IQOSToolViewModel: ObservableObject {
             return
         }
         if let lastUsageRefreshAttemptDate,
-           Date().timeIntervalSince(lastUsageRefreshAttemptDate) < Self.automaticUsageRefreshInterval {
+           Date().timeIntervalSince(lastUsageRefreshAttemptDate) < TimeInterval(dataRefreshIntervalSeconds) {
             consoleLog("Automatic usage refresh skipped: refresh cooldown is active")
             log("Known device background refresh skipped: refresh cooldown is active")
             return
@@ -1622,12 +2123,27 @@ final class IQOSToolViewModel: ObservableObject {
                     log("Known connected device usage refreshed")
                     statusText = String(localized: "Today usage updated")
                 } catch {
-                    lastUsageRefreshFailureDate = Date()
                     consoleLog("Automatic usage refresh failed on connected device: \(error)")
                     log("Known connected device refresh failed: \(error)")
-                    statusText = connectedDevice == nil
-                        ? String(localized: "Search for and connect to a nearby IQOS device")
-                        : String(localized: "Background update failed")
+                    markKnownDeviceDisconnected()
+
+                    if let knownDevice = KnownIQOSDeviceStore.load() {
+                        do {
+                            try await reconnectKnownDeviceAndRefresh(knownDevice)
+                            lastUsageRefreshFailureDate = nil
+                            consoleLog("Automatic usage refresh succeeded after reconnect")
+                            log("Known device reconnected and usage refreshed")
+                            statusText = String(localized: "Today usage updated")
+                        } catch {
+                            lastUsageRefreshFailureDate = Date()
+                            consoleLog("Automatic usage refresh failed after connected-device recovery: \(error)")
+                            log("Known device recovery refresh failed: \(error)")
+                            statusText = String(localized: "Search for and connect to a nearby IQOS device")
+                        }
+                    } else {
+                        lastUsageRefreshFailureDate = Date()
+                        statusText = String(localized: "Search for and connect to a nearby IQOS device")
+                    }
                 }
             }
             return
@@ -1644,36 +2160,13 @@ final class IQOSToolViewModel: ObservableObject {
         knownDeviceRefreshTask = Task { [weak self] in
             guard let self else { return }
             beginBackgroundRefresh()
-            isConnecting = true
-            statusText = String(format: String(localized: "Connecting to %@"), knownDevice.localName ?? knownDevice.identifier.uuidString)
             defer {
                 isUsageRefreshInProgress = false
-                isConnecting = false
                 endBackgroundRefresh()
             }
 
             do {
-                let connected = try await client.connectToKnownDevice(
-                    identifier: knownDevice.identifier,
-                    localName: knownDevice.localName,
-                    timeout: 10
-                )
-                guard !Task.isCancelled else { return }
-
-                device = connected
-                connectedDevice = connected.connectedDevice
-                connectedRSSI = nil
-                if backgroundUsageRefreshEnabled {
-                    KnownIQOSDeviceStore.save(connected.connectedDevice)
-                    startAutomaticUsageRefresh()
-                }
-
-                consoleLog("Known device attached to UI: \(connected.connectedDevice.displayName)")
-                log("Known device attached to UI: \(connected.connectedDevice.displayName)")
-                statusText = String(localized: "Connected")
-                startRSSIMonitoring()
-                try await refreshAll()
-                performPendingWidgetActionIfNeeded()
+                try await reconnectKnownDeviceAndRefresh(knownDevice)
                 lastUsageRefreshFailureDate = nil
                 consoleLog("Automatic usage refresh succeeded after reconnect")
                 log("Known device reconnected and usage refreshed")
@@ -1687,6 +2180,68 @@ final class IQOSToolViewModel: ObservableObject {
                     : String(localized: "Background update failed")
             }
         }
+    }
+
+    private func reconnectKnownDeviceAndRefresh(_ knownDevice: (identifier: UUID, localName: String?)) async throws {
+        isConnecting = true
+        statusText = String(format: String(localized: "Connecting to %@"), knownDevice.localName ?? knownDevice.identifier.uuidString)
+        defer { isConnecting = false }
+
+        let connected = try await client.connectToKnownDevice(
+            identifier: knownDevice.identifier,
+            localName: knownDevice.localName,
+            timeout: 10
+        )
+        guard !Task.isCancelled else { return }
+
+        device = connected
+        connectedDevice = connected.connectedDevice
+        connectedRSSI = nil
+        KnownIQOSDeviceStore.save(connected.connectedDevice)
+        if backgroundUsageRefreshEnabled {
+            startAutomaticUsageRefresh()
+        }
+
+        consoleLog("Known device attached to UI: \(connected.connectedDevice.displayName)")
+        log("Known device attached to UI: \(connected.connectedDevice.displayName)")
+        statusText = String(localized: "Connected")
+        startRSSIMonitoring()
+        try await refreshAll()
+        performPendingWidgetActionIfNeeded()
+    }
+
+    private func markKnownDeviceDisconnected() {
+        rssiMonitorTask?.cancel()
+        rssiMonitorTask = nil
+        device = nil
+        connectedDevice = nil
+        connectedRSSI = nil
+    }
+
+    private func shouldAutoConnect(to discovered: IQOSDiscoveredDevice) -> Bool {
+        guard connectedDevice == nil, !isConnecting, !isBusy else { return false }
+        guard let knownDevice = KnownIQOSDeviceStore.load() else { return false }
+        return isKnownDevice(discovered, matching: knownDevice)
+    }
+
+    private func isKnownDevice(
+        _ discovered: IQOSDiscoveredDevice,
+        matching knownDevice: (identifier: UUID, localName: String?)
+    ) -> Bool {
+        if discovered.id == knownDevice.identifier {
+            return true
+        }
+
+        guard let discoveredName = normalizedDeviceName(discovered.name),
+              let knownName = normalizedDeviceName(knownDevice.localName) else {
+            return false
+        }
+        return discoveredName == knownName
+    }
+
+    private func normalizedDeviceName(_ name: String?) -> String? {
+        let normalized = name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return normalized.isEmpty ? nil : normalized
     }
 
     func refreshDiagnostics() {
@@ -1858,7 +2413,7 @@ final class IQOSToolViewModel: ObservableObject {
         updateTodayUsageWidget()
         status = try? await device.readDeviceStatus()
         log("Full refresh finished")
-        statusText = String(localized: "Data updated")
+        statusText = dataUpdatedStatusText()
     }
 
     private func updateTodayUsageWidget() {
@@ -1877,6 +2432,10 @@ final class IQOSToolViewModel: ObservableObject {
             consoleLog("Widget usage update failed: App Group container unavailable")
             log("Widget usage update failed: App Group container unavailable")
         }
+    }
+
+    private func dataUpdatedStatusText(date: Date = Date()) -> String {
+        String(format: String(localized: "Data updated at %@"), Self.statusTimeFormatter.string(from: date))
     }
 
     func touchWidgetCommunication() {
@@ -1912,13 +2471,19 @@ final class IQOSToolViewModel: ObservableObject {
         automaticUsageRefreshTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(Self.automaticUsageRefreshInterval * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(TimeInterval(dataRefreshIntervalSeconds) * 1_000_000_000))
                 guard !Task.isCancelled else { break }
                 guard backgroundUsageRefreshEnabled else { continue }
                 consoleLog("Automatic usage refresh loop tick")
                 refreshKnownDeviceUsageIfPossible()
             }
         }
+    }
+
+    private func restartAutomaticUsageRefresh() {
+        automaticUsageRefreshTask?.cancel()
+        automaticUsageRefreshTask = nil
+        startAutomaticUsageRefresh()
     }
 
     private func stopAutomaticUsageRefresh() {
@@ -1934,20 +2499,25 @@ final class IQOSToolViewModel: ObservableObject {
 
     private func startRSSIMonitoring() {
         rssiMonitorTask?.cancel()
-        guard let connectedID = connectedDevice?.identifier else { return }
+        rssiMonitorTask = nil
+        guard backgroundScanEnabled, let connectedID = connectedDevice?.identifier else { return }
 
         rssiMonitorTask = Task { [weak self] in
             guard let self else { return }
 
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                guard !Task.isCancelled, !isScanning else { continue }
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                guard !Task.isCancelled,
+                      !isScanning,
+                      !isConnecting,
+                      !isBusy,
+                      !isUsageRefreshInProgress else { continue }
 
-                for await discovered in client.scan(timeout: 3) {
+                for await discovered in client.scan(timeout: 2) {
                     guard !Task.isCancelled else { break }
-                    upsert(discovered)
                     if discovered.id == connectedID {
-                        connectedRSSI = discovered.rssi
+                        upsert(discovered)
+                        break
                     }
                 }
             }
@@ -2006,6 +2576,14 @@ final class IQOSToolViewModel: ObservableObject {
         log("Debug log cleared")
     }
 
+    func copyDebugLogToPasteboard() {
+        guard !debugLogs.isEmpty else { return }
+#if canImport(UIKit)
+        UIPasteboard.general.string = debugLogs.joined(separator: "\n")
+        log("Debug log copied")
+#endif
+    }
+
     func showExportError(_ error: Error) {
         show(error)
     }
@@ -2025,7 +2603,10 @@ final class IQOSToolViewModel: ObservableObject {
         lines.append("generatedAt: \(Self.debugDateFormatter.string(from: Date()))")
         lines.append("statusText: \(statusText)")
         lines.append("debugModeEnabled: \(debugModeEnabled)")
+        lines.append("autoSearchEnabled: \(autoSearchEnabled)")
+        lines.append("backgroundScanEnabled: \(backgroundScanEnabled)")
         lines.append("backgroundUsageRefreshEnabled: \(backgroundUsageRefreshEnabled)")
+        lines.append("dataRefreshIntervalSeconds: \(dataRefreshIntervalSeconds)")
         lines.append("widgetAppGroupCandidates:")
         lines.append(TodayUsageStore.diagnosticSummary)
         lines.append("isUsageRefreshInProgress: \(isUsageRefreshInProgress)")
@@ -2119,8 +2700,20 @@ final class IQOSToolViewModel: ObservableObject {
 #endif
     }
 
-    private static let automaticUsageRefreshInterval: TimeInterval = 10 * 60
+    static let minimumDataRefreshIntervalSeconds = 60
+    static let maximumDataRefreshIntervalSeconds = 3_600
+    static let dataRefreshIntervalStepSeconds = 30
     private static let usageRefreshFailureBackoff: TimeInterval = 3 * 60
+    private static let statusTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static func clampedDataRefreshInterval(_ value: Int) -> Int {
+        min(max(value, minimumDataRefreshIntervalSeconds), maximumDataRefreshIntervalSeconds)
+    }
 }
 
 private enum KnownIQOSDeviceStore {
@@ -2142,9 +2735,31 @@ private enum KnownIQOSDeviceStore {
 }
 
 private enum AppSettingsStore {
+    private static let autoSearchKey = "settings.autoSearchEnabled"
+    private static let backgroundScanKey = "settings.backgroundScanEnabled"
     private static let backgroundUsageRefreshKey = "settings.backgroundUsageRefreshEnabled"
+    private static let dataRefreshIntervalKey = "settings.dataRefreshIntervalSeconds"
     private static let backgroundStyleKey = "settings.backgroundStyle"
     private static let debugModeKey = "settings.debugModeEnabled"
+    private static let defaultDataRefreshIntervalSeconds = 300
+
+    static var autoSearchEnabled: Bool {
+        get {
+            UserDefaults.standard.bool(forKey: autoSearchKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: autoSearchKey)
+        }
+    }
+
+    static var backgroundScanEnabled: Bool {
+        get {
+            UserDefaults.standard.bool(forKey: backgroundScanKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: backgroundScanKey)
+        }
+    }
 
     static var backgroundUsageRefreshEnabled: Bool {
         get {
@@ -2152,6 +2767,16 @@ private enum AppSettingsStore {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: backgroundUsageRefreshKey)
+        }
+    }
+
+    static var dataRefreshIntervalSeconds: Int {
+        get {
+            let value = UserDefaults.standard.integer(forKey: dataRefreshIntervalKey)
+            return value == 0 ? defaultDataRefreshIntervalSeconds : value
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: dataRefreshIntervalKey)
         }
     }
 
@@ -2199,6 +2824,18 @@ private extension View {
     func panelStyle() -> some View {
         padding(16)
             .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private extension Calendar {
+    func startOfMonth(for date: Date) -> Date {
+        let components = dateComponents([.year, .month], from: date)
+        return self.date(from: components) ?? startOfDay(for: date)
+    }
+
+    func dayIdentifier(for date: Date) -> String {
+        let components = dateComponents([.year, .month, .day], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
     }
 }
 
