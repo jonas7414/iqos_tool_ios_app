@@ -5,6 +5,7 @@
 "Are you currently located within the territory of the Republic of China?" = "Are you currently located within the territory of the Republic of China?";
 "Automatic" = "Automatic";
 "Automatically update today usage widget when iOS allows background Bluetooth" = "Automatically update today usage widget when iOS allows background Bluetooth";
+"Automatically refresh today usage data when iOS allows background Bluetooth" = "Automatically refresh today usage data when iOS allows background Bluetooth";
 "Background Update" = "Background Update";
 "Background Style" = "Background Style";
 "Battery" = "Battery";
@@ -150,3 +151,19 @@
 "Best Record" = "Best Record";
 "No records yet" = "No records yet";
 "%@ · %d sticks" = "%@ · %d sticks";
+"Device status, usage, scan, and diagnostics" = "Device status, usage, scan, and diagnostics";
+"Daily records and best usage" = "Daily records and best usage";
+"Device behavior and feedback" = "Device behavior and feedback";
+"Automation, appearance, and debug tools" = "Automation, appearance, and debug tools";
+"IQ Tool" = "IQ Tool";
+"Refresh" = "Refresh";
+"Offline" = "Offline";
+"Online" = "Online";
+"Current day consumption" = "Current day consumption";
+"Total %d sticks this week" = "Total %d sticks this week";
+"Automation" = "Automation";
+"Connection and data refresh behavior" = "Connection and data refresh behavior";
+"Appearance" = "Appearance";
+"Choose how IQ Tool follows the system" = "Choose how IQ Tool follows the system";
+"Debug Tools" = "Debug Tools";
+"Collect logs when troubleshooting" = "Collect logs when troubleshooting";

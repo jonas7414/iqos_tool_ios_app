@@ -5,6 +5,7 @@
 "Are you currently located within the territory of the Republic of China?" = "您目前是否位於中華民國境內？";
 "Automatic" = "自動";
 "Automatically update today usage widget when iOS allows background Bluetooth" = "iOS 允許背景藍牙時，自動更新今日根數小工具";
+"Automatically refresh today usage data when iOS allows background Bluetooth" = "iOS 允許背景藍牙時，自動重新整理今日使用資料";
 "Background Update" = "背景更新";
 "Background Style" = "背景風格";
 "Battery" = "電量";
@@ -150,3 +151,19 @@
 "Best Record" = "最佳紀錄";
 "No records yet" = "尚無紀錄";
 "%@ · %d sticks" = "%@ · %d 根";
+"Device status, usage, scan, and diagnostics" = "裝置狀態、使用量、掃描與診斷";
+"Daily records and best usage" = "每日紀錄與最佳紀錄";
+"Device behavior and feedback" = "裝置行為與回饋設定";
+"Automation, appearance, and debug tools" = "自動化、外觀與偵錯工具";
+"IQ Tool" = "IQ Tool";
+"Refresh" = "重新整理";
+"Offline" = "離線";
+"Online" = "已連線";
+"Current day consumption" = "本日使用概況";
+"Total %d sticks this week" = "本週共 %d 根";
+"Automation" = "自動化";
+"Connection and data refresh behavior" = "連線與資料更新行為";
+"Appearance" = "外觀";
+"Choose how IQ Tool follows the system" = "選擇 IQ Tool 如何跟隨系統外觀";
+"Debug Tools" = "偵錯工具";
+"Collect logs when troubleshooting" = "疑難排解時收集紀錄";

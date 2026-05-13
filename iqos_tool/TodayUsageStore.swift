@@ -2,6 +2,11 @@ import Foundation
 import WidgetKit
 
 enum TodayUsageStore {
+    // Widget support is intentionally disabled for the current release.
+    // Keep this store as a no-op compatibility layer so the main app can keep
+    // its history refresh flow, and the widget can be restored later without
+    // rewriting the call sites.
+    static let isWidgetSupportEnabled = false
     static let appGroupIdentifier = "group.iqos-tool.iqos-tool"
     static let widgetKind = "iqos_today_usage_widget"
     private static let controlWidgetKind = "iqos_control_widget"
@@ -28,6 +33,7 @@ enum TodayUsageStore {
 
     @discardableResult
     static func update(totalSmokingCount: UInt16, batteryLevel: UInt8?, date: Date = Date()) -> Bool {
+        guard isWidgetSupportEnabled else { return true }
         var record = loadRecord()
         let day = dayIdentifier(for: date)
         let currentTotal = Int(totalSmokingCount)
@@ -58,6 +64,7 @@ enum TodayUsageStore {
 
     @discardableResult
     static func touch(batteryLevel: UInt8? = nil, date: Date = Date()) -> Bool {
+        guard isWidgetSupportEnabled else { return true }
         var record = loadRecord()
         if let batteryLevel {
             record.batteryLevel = batteryLevel
@@ -72,7 +79,10 @@ enum TodayUsageStore {
     }
 
     static var diagnosticSummary: String {
-        candidateAppGroupIdentifiers.map { identifier in
+        guard isWidgetSupportEnabled else {
+            return "Widget support disabled for this release"
+        }
+        return candidateAppGroupIdentifiers.map { identifier in
             let available = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) != nil
             return "\(identifier): \(available ? "available" : "unavailable")"
         }

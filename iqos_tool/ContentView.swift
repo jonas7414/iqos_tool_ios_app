@@ -36,6 +36,24 @@ private enum AppSection: String, CaseIterable {
         case .settings: "gearshape"
         }
     }
+
+    var subtitle: LocalizedStringKey {
+        switch self {
+        case .home: "Device status, usage, scan, and diagnostics"
+        case .history: "Daily records and best usage"
+        case .control: "Device behavior and feedback"
+        case .settings: "Automation, appearance, and debug tools"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .home: .teal
+        case .history: .orange
+        case .control: .indigo
+        case .settings: Color(.systemGray)
+        }
+    }
 }
 
 enum BackgroundStyle: String, CaseIterable, Identifiable {
@@ -102,8 +120,17 @@ struct ContentView: View {
     private var mainContent: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 14) {
+                    AppHeaderView(
+                        selectedSection: selectedSection,
+                        isBusy: viewModel.isBusy,
+                        isConnected: viewModel.connectedDevice != nil
+                    ) {
+                        viewModel.refreshConnectedDevice()
+                    }
                     DeviceHeaderView(viewModel: viewModel)
+                    SectionTabBar(selectedSection: $selectedSection)
+                    SelectedSectionHeader(section: selectedSection)
                     switch selectedSection {
                     case .home:
                         UsageSummaryPanelView(viewModel: viewModel)
@@ -120,22 +147,9 @@ struct ContentView: View {
                 }
                 .padding(16)
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("IQ Tool")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    SectionMenuButton(selectedSection: $selectedSection)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        viewModel.refreshConnectedDevice()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .disabled(viewModel.connectedDevice == nil || viewModel.isBusy)
-                    .accessibilityLabel(Text("Refresh"))
-                }
-            }
+            .background(AppBackgroundView())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .alert("Operation Failed", isPresented: $viewModel.isShowingError) {
             Button("OK", role: .cancel) {}
@@ -389,18 +403,117 @@ private struct SectionMenuButton: View {
     }
 }
 
+private struct AppBackgroundView: View {
+    var body: some View {
+        Color(.systemGroupedBackground)
+            .ignoresSafeArea()
+    }
+}
+
+private struct AppHeaderView: View {
+    let selectedSection: AppSection
+    let isBusy: Bool
+    let isConnected: Bool
+    let refreshAction: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("IQ Tool")
+                    .font(.largeTitle.weight(.bold))
+                    .lineLimit(1)
+                Text(selectedSection.subtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: refreshAction) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(selectedSection.tint.opacity(0.14))
+                    if isBusy {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(selectedSection.tint)
+                    }
+                }
+                .frame(width: 42, height: 42)
+            }
+            .buttonStyle(.plain)
+            .disabled(!isConnected || isBusy)
+            .accessibilityLabel(Text("Refresh"))
+        }
+        .padding(.top, 4)
+    }
+}
+
+private struct SectionTabBar: View {
+    @Binding var selectedSection: AppSection
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(AppSection.allCases, id: \.self) { section in
+                Button {
+                    selectedSection = section
+                } label: {
+                    VStack(spacing: 5) {
+                        Image(systemName: section.icon)
+                            .font(.subheadline.weight(.semibold))
+                        Text(section.title)
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .foregroundStyle(selectedSection == section ? section.tint : Color.secondary)
+                    .background(tabBackground(for: section), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(selectedSection == section ? section.tint.opacity(0.28) : Color.clear, lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(section.title))
+            }
+        }
+        .padding(6)
+        .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color(.separator).opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private func tabBackground(for section: AppSection) -> Color {
+        selectedSection == section ? section.tint.opacity(0.12) : .clear
+    }
+}
+
 private struct SelectedSectionHeader: View {
     let section: AppSection
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: section.icon)
-                .font(.headline)
-                .foregroundStyle(.teal)
-            Text(section.title)
-                .font(.headline)
-            Spacer()
+        HStack(alignment: .center, spacing: 10) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(section.tint)
+                .frame(width: 4, height: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(section.title)
+                    .font(.headline)
+                Text(section.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
         }
+        .padding(.top, 2)
     }
 }
 
@@ -408,16 +521,16 @@ private struct DeviceHeaderView: View {
     @ObservedObject var viewModel: IQOSToolViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(viewModel.connectedDevice == nil ? Color(.tertiarySystemFill) : Color.green.opacity(0.16))
+                        .fill(connectionTint.opacity(viewModel.connectedDevice == nil ? 0.10 : 0.16))
                     Image(systemName: viewModel.connectedDevice == nil ? "dot.radiowaves.left.and.right" : "checkmark.seal.fill")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(viewModel.connectedDevice == nil ? Color.secondary : Color.green)
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(connectionTint)
                 }
-                .frame(width: 56, height: 56)
+                .frame(width: 54, height: 54)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(viewModel.connectedDevice?.displayName ?? String(localized: "Not Connected"))
@@ -430,16 +543,26 @@ private struct DeviceHeaderView: View {
                 }
 
                 Spacer(minLength: 0)
+
+                Text(viewModel.connectedDevice == nil ? "Offline" : "Online")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(connectionTint)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(connectionTint.opacity(0.12), in: Capsule())
             }
 
             HStack(spacing: 10) {
-                MetricTile(title: "Battery", value: viewModel.batteryText, icon: "battery.100percent")
-                MetricTile(title: "Model", value: viewModel.connectedDevice?.model.displayName ?? "--", icon: "iphone.gen3")
-                MetricTile(title: "Signal", value: viewModel.connectedRSSIText, icon: "antenna.radiowaves.left.and.right")
+                MetricTile(title: "Battery", value: viewModel.batteryText, icon: "battery.100percent", tint: .green)
+                MetricTile(title: "Model", value: viewModel.connectedDevice?.model.displayName ?? "--", icon: "iphone.gen3", tint: .teal)
+                MetricTile(title: "Signal", value: viewModel.connectedRSSIText, icon: "antenna.radiowaves.left.and.right", tint: .orange)
             }
         }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .panelStyle()
+    }
+
+    private var connectionTint: Color {
+        viewModel.connectedDevice == nil ? .secondary : .green
     }
 }
 
@@ -447,35 +570,51 @@ private struct UsageSummaryPanelView: View {
     @ObservedObject var viewModel: IQOSToolViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("Today Usage", systemImage: "flame.fill")
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label("Today Usage", systemImage: "flame.fill")
+                        .font(.headline)
+                    Text("Current day consumption")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 comparisonBadge
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 12) {
                 Text("\(viewModel.usageSnapshot.todayCount)")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .font(.system(size: 54, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                Text("Sticks")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Sticks")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: comparisonIcon)
+                            .font(.caption.weight(.bold))
+                        Text(viewModel.usageComparisonText)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .foregroundStyle(comparisonColor)
+                }
+                Spacer(minLength: 0)
             }
 
-            HStack(spacing: 8) {
-                Image(systemName: comparisonIcon)
-                    .font(.subheadline.weight(.semibold))
-                Text(viewModel.usageComparisonText)
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
+            HStack {
                 Text(String(format: String(localized: "Yesterday %d"), viewModel.usageSnapshot.yesterdayCount))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Spacer()
+                Text(String(format: String(localized: "Total %d sticks this week"), weekTotal))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            .foregroundStyle(comparisonColor)
         }
         .panelStyle()
     }
@@ -500,6 +639,10 @@ private struct UsageSummaryPanelView: View {
         if viewModel.usageDifference > 0 { return "arrow.up.right" }
         if viewModel.usageDifference < 0 { return "arrow.down.right" }
         return "minus"
+    }
+
+    private var weekTotal: Int {
+        viewModel.usageSnapshot.entries.reduce(0) { $0 + $1.count }
     }
 }
 
@@ -884,12 +1027,15 @@ private struct MetricTile: View {
     let title: LocalizedStringKey
     let value: String
     let icon: String
+    var tint: Color = .teal
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: icon)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.teal)
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             Text(value)
                 .font(.headline)
                 .lineLimit(1)
@@ -923,7 +1069,8 @@ private struct ScanPanelView: View {
                     }
                 }
                 .frame(width: 36, height: 36)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .foregroundStyle(.teal)
+                .background(Color.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .disabled(viewModel.isScanning || viewModel.isConnecting)
                 .accessibilityLabel(Text("Scan"))
             }
@@ -940,6 +1087,8 @@ private struct ScanPanelView: View {
                                 Image(systemName: "circle.grid.cross.fill")
                                     .font(.title3)
                                     .foregroundStyle(.mint)
+                                    .frame(width: 34, height: 34)
+                                    .background(Color.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(device.displayName)
                                         .font(.subheadline.weight(.semibold))
@@ -959,6 +1108,10 @@ private struct ScanPanelView: View {
                             }
                             .padding(12)
                             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color(.separator).opacity(0.18), lineWidth: 1)
+                            }
                         }
                         .disabled(viewModel.isConnecting)
                     }
@@ -1329,11 +1482,13 @@ private struct SettingsPanelView: View {
                     viewModel.enableDebugMode()
                 }
 
+            ControlSectionHeader(title: "Automation", subtitle: "Connection and data refresh behavior")
+
             Toggle(isOn: $viewModel.backgroundUsageRefreshEnabled) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Background Update")
                         .font(.subheadline.weight(.semibold))
-                    Text("Automatically update today usage widget when iOS allows background Bluetooth")
+                    Text("Automatically refresh today usage data when iOS allows background Bluetooth")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1391,6 +1546,8 @@ private struct SettingsPanelView: View {
             .padding(14)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
+            ControlSectionHeader(title: "Appearance", subtitle: "Choose how IQ Tool follows the system")
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("Background Style")
                     .font(.subheadline.weight(.semibold))
@@ -1404,6 +1561,8 @@ private struct SettingsPanelView: View {
             }
             .padding(14)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            ControlSectionHeader(title: "Debug Tools", subtitle: "Collect logs when troubleshooting")
 
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(isOn: $viewModel.debugModeEnabled) {
@@ -2361,6 +2520,10 @@ final class IQOSToolViewModel: ObservableObject {
     }
 
     func handleWidgetURL(_ url: URL) {
+        // Widget actions are disabled for this release because the widget target
+        // is not embedded in the app. Keep the URL handler in place so it can be
+        // restored with the widget without changing the public URL scheme.
+        guard TodayUsageStore.isWidgetSupportEnabled else { return }
         guard url.scheme == "iqostool", url.host == "widget" else { return }
         let action: WidgetDeviceAction?
         switch url.path {
@@ -2418,13 +2581,15 @@ final class IQOSToolViewModel: ObservableObject {
 
     private func updateTodayUsageWidget() {
         guard let totalSmokingCount = diagnostics?.totalSmokingCount else {
-            consoleLog("Widget usage update skipped: diagnostics totalSmokingCount is nil")
-            if !TodayUsageStore.touch(batteryLevel: batteryLevel) {
+            consoleLog("Usage update skipped: diagnostics totalSmokingCount is nil")
+            if TodayUsageStore.isWidgetSupportEnabled && !TodayUsageStore.touch(batteryLevel: batteryLevel) {
                 consoleLog("Widget usage heartbeat failed: App Group container unavailable")
             }
             return
         }
         usageSnapshot = LocalUsageHistoryStore.update(totalSmokingCount: totalSmokingCount)
+        // Widget support is disabled for this release; local history remains active.
+        guard TodayUsageStore.isWidgetSupportEnabled else { return }
         if TodayUsageStore.update(totalSmokingCount: totalSmokingCount, batteryLevel: batteryLevel) {
             consoleLog("Widget usage updated with total=\(totalSmokingCount)")
             log("Widget usage updated with total=\(totalSmokingCount)")
@@ -2439,6 +2604,9 @@ final class IQOSToolViewModel: ObservableObject {
     }
 
     func touchWidgetCommunication() {
+        // Widget support is disabled for this release; leave this no-op for the
+        // existing foreground/background refresh call sites.
+        guard TodayUsageStore.isWidgetSupportEnabled else { return }
         if TodayUsageStore.touch(batteryLevel: batteryLevel) {
             consoleLog("Widget communication heartbeat written")
             log("Widget communication heartbeat written")
@@ -2824,6 +2992,11 @@ private extension View {
     func panelStyle() -> some View {
         padding(16)
             .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color(.separator).opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.04), radius: 10, x: 0, y: 4)
     }
 }
 

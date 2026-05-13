@@ -62,4 +62,4 @@ jobs:
 
             Notes:
             - Install this IPA through SideStore so it can be signed on-device.
-            - This app includes a widget extension and App Group entitlement. SideStore may require extra App ID capacity for the extension, and widget/App Group behavior depends on the signing account and SideStore's resigning support.
+            - Widget support is disabled in this release, so the IPA only packages the main app.

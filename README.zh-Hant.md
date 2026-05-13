@@ -52,7 +52,7 @@ https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/apps.json
 目前 release 版 IPA 指向：
 
 ```text
-https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.3/iqos_tool-v1.0.3.ipa
+https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.4/iqos_tool-v1.0.4.ipa
 ```
 
 SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名後安裝。
@@ -79,17 +79,17 @@ SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名�
 | Battery Mode       | 部分型號           |
 | Auto Start         | 部分型號           |
 | Smart Gesture      | 部分型號           |
-| 桌面小工具         | 需 iOS 支援 Widget |
+| 桌面小工具         | v1.0.4 暫時停用    |
 
 ## 支援版本
 
 | 版本   | 最低 iOS 版本 | Build SDK | 狀態 |
 | ------ | ------------- | --------- | ---- |
-| v1.0.3 | iOS 26.4      | iOS 26.4  | 支援 |
+| v1.0.4 | iOS 26.4      | iOS 26.4  | 支援 |
 
 ## 已知問題
 
-1. SideStore 安裝時，桌面小工具可能無法顯示本日根數、電量或更新時間。原因是 SideStore 重新簽名後可能沒有授權 App Group，主 App 與 Widget 無法共享資料；若 Debug ZIP 顯示 `widgetAppGroupCandidates` 皆為 `unavailable`，即屬於此限制。
+1. v1.0.4 暫時停用桌面小工具與 App Group 打包，降低 SideStore 安裝與重新簽名時的相容性問題。
 2. 使用天數顯示數量目前可能不正確，後續版本會再修正診斷資料解析與顯示邏輯。
 
 ## 系統需求
