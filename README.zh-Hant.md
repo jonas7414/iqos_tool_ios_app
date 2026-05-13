@@ -11,33 +11,34 @@
 
 </div>
 
-IQ Tool 是一款以 SwiftUI 開發的 iOS 工具 App，僅供教育與研究用途。它可以透過 Bluetooth Low Energy 連線到支援的 IQOS 系列裝置，讀取裝置資訊、執行支援的控制功能，並提供桌面小工具快速查看狀態。
+IQ Tool 是一款 iOS 工具 App，僅供教育與研究用途。它可以透過藍牙連線到支援的 IQOS 系列裝置，查看裝置資訊、追蹤使用紀錄，並執行支援的控制功能。
 
-此 App 源自並參考 [`hauntedfail/iqos_cli`](https://github.com/hauntedfail/iqos_cli) 的裝置控制研究，再以 Swift、CoreBluetooth、SwiftUI、WidgetKit 重新實作成適合 iPhone 使用的介面。
+此 App 源自並參考 [`hauntedfail/iqos_cli`](https://github.com/hauntedfail/iqos_cli) 的裝置控制研究，再重新實作成適合 iPhone 使用的介面。
 
 > 本專案與 Philip Morris International 無關，未受其授權、背書或贊助。IQOS 與相關商標、名稱及權利歸 Philip Morris International 與其權利人所有。
 
 ## 功能
 
-- 透過 CoreBluetooth 掃描與連線
-- 顯示裝置狀態、電量、RSSI、韌體、產品編號與診斷資料
-- 計算本日使用根數
-- 桌面小工具顯示本日使用、剩餘電量與鎖定 / 解鎖捷徑
-- 支援的控制功能：
-    - 指示燈亮度
-    - Battery Mode：Performance / Eco
-    - Pause Mode
-    - FlexPuff
-    - Auto Start
-    - Smart Gesture
-    - 震動設定
-    - 上鎖 / 解鎖
-    - 尋找裝置
-- 背景更新開關，可在 iOS 允許背景藍牙時更新已記憶裝置狀態
-- Debug 模式、App 內 log、Debug ZIP 匯出
-- GitHub 錯誤回報入口
-- 英文與繁體中文 localization
-- SideStore 相容的 unsigned IPA 自動 release workflow
+- 掃描附近裝置並連線到已知裝置。
+- 顯示裝置名稱、型號、連線狀態、電量與訊號強度。
+- 讀取韌體版本、產品編號、總使用次數、使用天數與電壓等診斷資訊。
+- 顯示本日使用根數、一週趨勢與歷史日曆紀錄。
+- 在歷史頁查看每日根數、月總計、日平均與最佳紀錄。
+- 開啟 App 時可自動搜尋已知裝置，並在連線後自動更新資料。
+- 可自訂資料更新間隔、背景更新、背景掃描與自動搜尋。
+- 支援裝置控制：
+  - 指示燈亮度
+  - Battery Mode：Performance / Eco
+  - Pause Mode
+  - FlexPuff
+  - Auto Start
+  - Smart Gesture
+  - 震動設定
+  - 上鎖 / 解鎖
+  - 尋找裝置
+- 可切換淺色、深色或跟隨系統外觀。
+- Debug 模式可查看 App 內紀錄、複製紀錄並匯出 Debug ZIP。
+- 內建繁體中文與英文介面。
 
 ## 安裝
 
@@ -99,12 +100,10 @@ SideStore 會下載 unsigned IPA，並使用你設定的 Apple ID 重新簽名�
 - 附近有支援的裝置
 - iOS 26.4 或更新版本
 
-此 App 使用以下能力：
+此 App 使用以下系統能力：
 
 - Bluetooth access
 - Background Bluetooth mode
-- App Groups，用於主 App 與 Widget 分享資料
-- Widget extension
 
 ## 開發
 

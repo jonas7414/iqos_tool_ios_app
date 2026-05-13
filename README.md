@@ -11,33 +11,34 @@ English | [繁體中文](README.zh-Hant.md)
 
 </div>
 
-IQ Tool is a SwiftUI iOS utility for educational and research use. It connects to supported IQOS-family devices over Bluetooth Low Energy, reads device information, exposes supported controls, and provides widgets for quick status checks.
+IQ Tool is an iOS utility for educational and research use. It connects to supported IQOS-family devices over Bluetooth, shows device information, tracks usage history, and exposes supported device controls.
 
-This app is inspired by and derived from the device-control research in [`hauntedfail/iqos_cli`](https://github.com/hauntedfail/iqos_cli). The iOS app reimplements the workflow with Swift, CoreBluetooth, SwiftUI, WidgetKit, and a touch-first interface.
+This app is inspired by and derived from the device-control research in [`hauntedfail/iqos_cli`](https://github.com/hauntedfail/iqos_cli). The iOS app reimplements the workflow with a touch-first interface.
 
 > This project is not affiliated with, endorsed by, or sponsored by Philip Morris International. IQOS and related marks belong to Philip Morris International and their respective owners.
 
 ## Features
 
-- Bluetooth scanning and connection through CoreBluetooth
-- Device status, battery level, RSSI, firmware, product number, and diagnostics
-- Today usage count tracking
-- Home Screen widgets for today usage, battery status, and lock/unlock shortcuts
-- Supported controls:
-    - Indicator light brightness
-    - Battery mode: Performance / Eco
-    - Pause mode
-    - FlexPuff
-    - Auto Start
-    - Smart Gesture
-    - Vibration settings
-    - Lock / unlock
-    - Find device
-- Background refresh option for known devices when iOS permits background Bluetooth activity
-- Debug mode with in-app logs and ZIP export
-- GitHub issue reporting entry
-- English and Traditional Chinese localization
-- SideStore-compatible unsigned IPA release workflow
+- Scan nearby devices and connect to known devices.
+- View device name, model, connection status, battery level, and signal strength.
+- Read firmware version, product number, total usage count, days used, voltage, and diagnostics.
+- Track today usage, weekly trend, and historical daily records.
+- Use the History page to view daily counts, month total, daily average, and best record.
+- Automatically search for known devices when the app opens, then refresh data after connecting.
+- Configure data refresh interval, background refresh, background scan, and auto search.
+- Supported device controls:
+  - Indicator light brightness
+  - Battery mode: Performance / Eco
+  - Pause mode
+  - FlexPuff
+  - Auto Start
+  - Smart Gesture
+  - Vibration settings
+  - Lock / unlock
+  - Find device
+- Switch between light, dark, or system appearance.
+- Use Debug mode to view logs, copy logs, and export a Debug ZIP.
+- Built-in English and Traditional Chinese interface.
 
 ## Installation
 
@@ -52,7 +53,7 @@ https://raw.githubusercontent.com/jonas7414/iqos_tool_ios_app/main/apps.json
 The current release points to:
 
 ```text
-https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.2/iqos_tool-v1.0.2.ipa
+https://github.com/jonas7414/iqos_tool_ios_app/releases/download/v1.0.4/iqos_tool-v1.0.4.ipa
 ```
 
 SideStore will download the unsigned IPA and sign it with your configured Apple ID.
@@ -79,17 +80,17 @@ Feature support depends on the connected device model and firmware. Some control
 | Battery mode                   | Selected models             |
 | Auto Start                     | Selected models             |
 | Smart Gesture                  | Selected models             |
-| Widgets                        | iOS widget support required |
+| Widgets                        | Temporarily disabled in v1.0.4 |
 
 ## Support Matrix
 
 | Version | Minimum iOS | Build SDK | Status |
 | ------- | ----------- | --------- | ------ |
-| v1.0.2  | iOS 26.4    | iOS 26.4  | Supported |
+| v1.0.4  | iOS 26.4    | iOS 26.4  | Supported |
 
 ## Known Issues
 
-1. Widgets may not show today usage, battery level, or update time when installed through SideStore. SideStore may resign the app without a usable App Group entitlement, which prevents the main app and widget from sharing data. If the debug ZIP shows all `widgetAppGroupCandidates` as `unavailable`, this is the active limitation.
+1. Widgets and App Group packaging are temporarily disabled in v1.0.4 to improve SideStore installation and resigning compatibility.
 2. The displayed days-used count may be incorrect. A future release will revisit the diagnostics parsing and display logic.
 
 ## Requirements
@@ -99,12 +100,10 @@ Feature support depends on the connected device model and firmware. Some control
 - A supported nearby device
 - iOS 26.4 or later
 
-The app uses these capabilities:
+The app uses these system capabilities:
 
 - Bluetooth access
 - Background Bluetooth mode
-- App Groups for sharing widget data
-- Widget extension
 
 ## Development
 
